@@ -157,3 +157,4 @@ def get_reports_data(
         "table_rows": table_rows,
         "customers": customer_names
     }
+

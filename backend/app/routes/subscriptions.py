@@ -106,3 +106,4 @@ def update_subscription_status(
     db.commit()
     db.refresh(sub)
     return serialize_sub(sub)
+

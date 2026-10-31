@@ -42,3 +42,4 @@ def get_all_users(
         )
     users = query.order_by(User.id.asc()).all()
     return [serialize_user(u) for u in users]
+

@@ -44,3 +44,4 @@ def toggle_task_status(
     db.commit()
     db.refresh(task)
     return serialize_task(task)
+

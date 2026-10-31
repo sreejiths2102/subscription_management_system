@@ -115,3 +115,4 @@ def delete_tax(
     tax.is_active = False
     db.commit()
     return {"message": f"Tax rule {tax.code} deactivated successfully."}
+

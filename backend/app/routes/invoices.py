@@ -74,3 +74,4 @@ def create_invoice(
     db.commit()
     db.refresh(inv)
     return serialize_invoice(inv)
+

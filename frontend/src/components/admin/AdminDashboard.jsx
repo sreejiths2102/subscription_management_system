@@ -209,7 +209,7 @@ export default function AdminDashboard({ onNavigate }) {
           <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Live Business Performance Metrics</h2>
           <span className="text-xs text-neutral-400">Strictly from PostgreSQL Database</span>
         </div>
-        
+
         {loading && kpiCards.length === 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {[1, 2, 3, 4, 5, 6].map((i) => (

@@ -129,3 +129,4 @@ def delete_discount(
     discount.is_active = False
     db.commit()
     return {"message": f"Discount {discount.code} deactivated successfully."}
+

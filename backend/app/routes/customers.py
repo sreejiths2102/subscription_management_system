@@ -66,3 +66,4 @@ def create_customer(
     db.commit()
     db.refresh(customer)
     return serialize_customer(customer)
+
