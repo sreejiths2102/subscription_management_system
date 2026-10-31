@@ -199,3 +199,61 @@ def test_auth_me_expired_token():
     assert response.status_code == 401
     assert "expired" in response.json()["detail"].lower()
 
+
+def test_forgot_password_unregistered_email():
+    response = client.post("/api/auth/forgot-password", json={"email": "nonexistent.user.test@example.com"})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["is_registered"] is False
+    assert data["reset_link"] is None
+    assert "dispatched" in data["message"].lower() or "sent" in data["message"].lower()
+
+
+def test_forgot_password_registered_email_and_reset():
+    # 1. Register user
+    reg_payload = {
+        "name": "Reset Test User",
+        "email": "reset.test@example.com",
+        "password": "OldPassword123!",
+        "confirm_password": "OldPassword123!"
+    }
+    reg_res = client.post("/api/auth/register", json=reg_payload)
+    assert reg_res.status_code in [201, 400]
+
+    # 2. Request forgot password
+    forgot_res = client.post("/api/auth/forgot-password", json={"email": "reset.test@example.com"})
+    assert forgot_res.status_code == 200
+    forgot_data = forgot_res.json()
+    assert forgot_data["is_registered"] is True
+    assert forgot_data["reset_link"] is not None
+    assert "token=" in forgot_data["reset_link"]
+
+    # 3. Extract token
+    token = forgot_data["reset_link"].split("token=")[1]
+
+    # 4. Reset password
+    reset_payload = {
+        "token": token,
+        "password": "NewSecurePassword456!",
+        "confirm_password": "NewSecurePassword456!"
+    }
+    reset_res = client.post("/api/auth/reset-password", json=reset_payload)
+    assert reset_res.status_code == 200
+    assert reset_res.json()["success"] is True
+
+    # 5. Sign in with old password (must fail)
+    old_login = client.post("/api/auth/login", json={
+        "email": "reset.test@example.com",
+        "password": "OldPassword123!"
+    })
+    assert old_login.status_code == 401
+
+    # 6. Sign in with new password (must succeed)
+    new_login = client.post("/api/auth/login", json={
+        "email": "reset.test@example.com",
+        "password": "NewSecurePassword456!"
+    })
+    assert new_login.status_code == 200
+    assert "access_token" in new_login.json()
+
+

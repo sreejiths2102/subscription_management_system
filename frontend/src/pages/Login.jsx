@@ -60,8 +60,7 @@ export default function Login() {
       localStorage.setItem('access_token', data.access_token);
       localStorage.setItem('user', JSON.stringify(data.user));
 
-      // Redirect role-based: admin -> /admin, staff -> /staff, customer -> /blank (or customer panel)
-      // Redirect based on role:
+      // Redirect role-based: admin -> /admin, staff -> /staff, customer -> /customer
       if (data.user?.role === 'admin') {
         navigate('/admin', { replace: true });
       } else if (data.user?.role === 'staff') {
@@ -146,10 +145,11 @@ export default function Login() {
                   autoComplete="email"
                   value={formData.email}
                   onChange={handleChange}
-                  className={`block w-full appearance-none rounded-xl border px-3.5 py-2.5 text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-1 sm:text-sm transition-colors ${errors.email
+                  className={`block w-full appearance-none rounded-xl border px-3.5 py-2.5 text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-1 sm:text-sm transition-colors ${
+                    errors.email
                       ? 'border-red-300 focus:border-red-500 focus:ring-red-500'
                       : 'border-neutral-200 focus:border-olive-600 focus:ring-olive-600'
-                    }`}
+                  }`}
                   placeholder="name@company.com"
                 />
                 {errors.email && <p className="mt-1 text-xs text-red-600">{errors.email}</p>}
@@ -157,9 +157,17 @@ export default function Login() {
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-xs font-semibold uppercase tracking-wider text-neutral-600">
-                Password
-              </label>
+              <div className="flex items-center justify-between">
+                <label htmlFor="password" className="block text-xs font-semibold uppercase tracking-wider text-neutral-600">
+                  Password
+                </label>
+                <Link
+                  to="/forgot-password"
+                  className="text-xs font-medium text-neutral-600 hover:text-black underline underline-offset-4 decoration-neutral-300 hover:decoration-black transition-colors"
+                >
+                  Forgot password?
+                </Link>
+              </div>
               <div className="mt-1 relative">
                 <input
                   id="password"
@@ -168,10 +176,11 @@ export default function Login() {
                   autoComplete="current-password"
                   value={formData.password}
                   onChange={handleChange}
-                  className={`block w-full appearance-none rounded-xl border px-3.5 py-2.5 pr-10 text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-1 sm:text-sm transition-colors ${errors.password
+                  className={`block w-full appearance-none rounded-xl border px-3.5 py-2.5 pr-10 text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-1 sm:text-sm transition-colors ${
+                    errors.password
                       ? 'border-red-300 focus:border-red-500 focus:ring-red-500'
                       : 'border-neutral-200 focus:border-olive-600 focus:ring-olive-600'
-                    }`}
+                  }`}
                   placeholder="••••••••••••"
                 />
                 <button

@@ -103,3 +103,31 @@ def get_current_user(
     
     return user
 
+
+def create_password_reset_token(email: str) -> str:
+    """Generates a signed, short-lived password reset token (valid for 30 minutes)."""
+    to_encode = {
+        "sub": email.strip().lower(),
+        "type": "password_reset"
+    }
+    return create_access_token(to_encode, expires_delta=timedelta(minutes=30))
+
+
+def verify_password_reset_token(token: str) -> str:
+    """Decodes and validates a password reset token, returning the associated email."""
+    payload = decode_access_token(token)
+    token_type = payload.get("type")
+    if token_type != "password_reset":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid token type: expected password reset token.",
+        )
+    email: Optional[str] = payload.get("sub")
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid reset token: missing user email subject.",
+        )
+    return email
+
+

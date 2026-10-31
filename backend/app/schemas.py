@@ -61,3 +61,44 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     user: UserResponse
 
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr = Field(..., description="Registered Email Address")
+
+
+class ForgotPasswordResponse(BaseModel):
+    message: str
+    reset_link: str | None = None
+    is_registered: bool = False
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(..., min_length=1, description="Password reset token")
+    password: str = Field(..., description="New password with strict complexity")
+    confirm_password: str = Field(..., description="Confirmation of new password")
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        if len(v) <= 8:
+            raise ValueError("Password must contain more than 8 characters.")
+        if not any(c.isupper() for c in v):
+            raise ValueError("Password must contain at least one uppercase letter.")
+        if not any(c.islower() for c in v):
+            raise ValueError("Password must contain at least one lowercase letter.")
+        if not re.search(r"[^a-zA-Z0-9\s]", v):
+            raise ValueError("Password must contain at least one special character.")
+        return v
+
+    @model_validator(mode="after")
+    def check_passwords_match(self) -> "ResetPasswordRequest":
+        if self.password != self.confirm_password:
+            raise ValueError("Confirm password must match the password.")
+        return self
+
+
+class ResetPasswordResponse(BaseModel):
+    message: str
+    success: bool = True
+
+
