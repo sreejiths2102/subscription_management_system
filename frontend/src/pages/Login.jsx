@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { authService } from '../api';
-import { Eye, EyeOff, AlertCircle, Loader2, ShieldCheck } from 'lucide-react';
+import { Eye, EyeOff, AlertCircle, Loader2, ShieldCheck, UserCheck } from 'lucide-react';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -60,9 +60,12 @@ export default function Login() {
       localStorage.setItem('access_token', data.access_token);
       localStorage.setItem('user', JSON.stringify(data.user));
 
+      // Redirect role-based: admin -> /admin, staff -> /staff, customer -> /blank (or customer panel)
       // Redirect based on role:
       if (data.user?.role === 'admin') {
         navigate('/admin', { replace: true });
+      } else if (data.user?.role === 'staff') {
+        navigate('/staff', { replace: true });
       } else if (data.user?.role === 'customer') {
         navigate('/customer', { replace: true });
       } else {
@@ -86,6 +89,15 @@ export default function Login() {
     setFormData({
       email: 'admin@subscription.com',
       password: 'AdminPassword123!',
+    });
+    setErrors({});
+    setServerError('');
+  };
+
+  const fillStaffCredentials = () => {
+    setFormData({
+      email: 'staff@subscription.com',
+      password: 'StaffPassword123!',
     });
     setErrors({});
     setServerError('');
@@ -192,6 +204,30 @@ export default function Login() {
             </div>
           </form>
 
+          {/* Quick Demo Autofill Helper */}
+          <div className="mt-6 pt-5 border-t border-neutral-100 flex flex-col gap-2">
+            <span className="text-[11px] font-medium text-neutral-400 text-center uppercase tracking-wider">
+              Quick Role Sign-In
+            </span>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={fillAdminCredentials}
+                className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-neutral-200 text-xs font-medium text-neutral-700 hover:bg-neutral-50 transition-colors"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-olive-600" />
+                <span>Admin Demo</span>
+              </button>
+              <button
+                type="button"
+                onClick={fillStaffCredentials}
+                className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-neutral-200 text-xs font-medium text-neutral-700 hover:bg-neutral-50 transition-colors"
+              >
+                <UserCheck className="w-3.5 h-3.5 text-olive-600" />
+                <span>Staff Demo</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
