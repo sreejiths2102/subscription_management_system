@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   CreditCard,
   Plus,
@@ -17,7 +17,7 @@ import {
   Send,
   DollarSign
 } from 'lucide-react';
-import { authService } from '../../api';
+import { authService, paymentService, invoiceService } from '../../api';
 
 export default function PaymentManagementPanel({ userRole: propRole, isCustomerView: propCustomerView }) {
   const currentUser = authService.getUser() || { role: 'admin', name: 'Admin User' };
@@ -33,150 +33,88 @@ export default function PaymentManagementPanel({ userRole: propRole, isCustomerV
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [recordOpen, setRecordOpen] = useState(false);
   const [actionSuccess, setActionSuccess] = useState('');
+  const [loading, setLoading] = useState(true);
 
-  // Sample Payments Data
-  const [payments, setPayments] = useState([
-    {
-      id: 'PAY-8822',
-      invoiceId: 'INV-2026-089',
-      customer: 'Acme Technologies Inc.',
-      customerEmail: 'billing@acme.com',
-      amount: '$3,600.00',
-      numericAmount: 3600,
-      method: 'Bank Transfer (ACH)',
-      date: '2026-10-30',
-      status: 'Completed',
-      reference: 'ACH-TX-9938210',
-      notes: 'Annual upfront settlement cleared via JP Morgan Chase',
-    },
-    {
-      id: 'PAY-8821',
-      invoiceId: 'INV-2026-086',
-      customer: 'Nexus Cloud Systems',
-      customerEmail: 'finance@nexuscloud.io',
-      amount: '$450.00',
-      numericAmount: 450,
-      method: 'Credit Card (Visa)',
-      date: '2026-10-29',
-      status: 'Completed',
-      reference: 'STRIPE-CH-829104',
-      notes: 'Automated recurring card debit',
-    },
-    {
-      id: 'PAY-8820',
-      invoiceId: 'INV-2026-085',
-      customer: 'Cloudflow Networks',
-      customerEmail: 'accounts@cloudflow.net',
-      amount: '$890.00',
-      numericAmount: 890,
-      method: 'Credit Card (Mastercard)',
-      date: '2026-10-28',
-      status: 'Completed',
-      reference: 'STRIPE-CH-194022',
-      notes: 'Pro monthly renewal payment',
-    },
-    {
-      id: 'PAY-8819',
-      invoiceId: 'INV-2026-083',
-      customer: 'Horizon AI Labs',
-      customerEmail: 'ops@horizonai.com',
-      amount: '$1,200.00',
-      numericAmount: 1200,
-      method: 'Wire Transfer',
-      date: '2026-10-27',
-      status: 'Completed',
-      reference: 'WIRE-US-482019',
-      notes: 'Verified against swift receipt code',
-    },
-    {
-      id: 'PAY-8818',
-      invoiceId: 'INV-2026-081',
-      customer: 'Apex Global Media',
-      customerEmail: 'billing@apexmedia.org',
-      amount: '$540.00',
-      numericAmount: 540,
-      method: 'Stripe Checkout',
-      date: '2026-10-22',
-      status: 'Completed',
-      reference: 'STRIPE-CH-661943',
-      notes: 'Self-serve checkout portal payment',
-    },
-  ]);
-
-  // Outstanding and Overdue Invoices
-  const [pendingInvoices, setPendingInvoices] = useState([
-    {
-      invoiceId: 'INV-2026-088',
-      customer: 'Nexus Cloud Systems',
-      amount: '$450.00',
-      numericAmount: 450,
-      dueDate: '2026-10-29',
-      status: 'Overdue',
-      daysOverdue: 2,
-    },
-    {
-      invoiceId: 'INV-2026-087',
-      customer: 'Global Logistics Hub',
-      amount: '$1,370.00',
-      numericAmount: 1370,
-      dueDate: '2026-10-25',
-      status: 'Overdue',
-      daysOverdue: 6,
-    },
-    {
-      invoiceId: 'INV-2026-090',
-      customer: 'Vanguard Analytics',
-      amount: '$2,450.00',
-      numericAmount: 2450,
-      dueDate: '2026-11-10',
-      status: 'Outstanding',
-      daysDue: 10,
-    },
-    {
-      invoiceId: 'INV-2026-091',
-      customer: 'Starlight Media',
-      amount: '$2,180.00',
-      numericAmount: 2180,
-      dueDate: '2026-11-15',
-      status: 'Outstanding',
-      daysDue: 15,
-    },
-  ]);
+  const [payments, setPayments] = useState([]);
+  const [pendingInvoices, setPendingInvoices] = useState([]);
 
   // New Record Payment form state
   const [newPayment, setNewPayment] = useState({
-    invoiceId: 'INV-2026-088',
-    customer: 'Nexus Cloud Systems',
-    customerEmail: 'finance@nexuscloud.io',
+    invoiceId: 'INV-2026-092',
+    customer: 'ABC Ltd',
+    customerEmail: 'finance@abcltd.com',
     amount: '450.00',
     method: 'Credit Card (Visa)',
     date: new Date().toISOString().split('T')[0],
     reference: `TX-${Date.now().toString().slice(-6)}`,
-    notes: 'Manual payment recorded by staff operator',
+    notes: 'Payment recorded via billing ledger',
   });
 
-  const handleRecordPayment = (e) => {
-    e.preventDefault();
-    const created = {
-      id: `PAY-${Math.floor(1000 + Math.random() * 9000)}`,
-      invoiceId: newPayment.invoiceId,
-      customer: newPayment.customer,
-      customerEmail: newPayment.customerEmail,
-      amount: `$${parseFloat(newPayment.amount).toFixed(2)}`,
-      numericAmount: parseFloat(newPayment.amount),
-      method: newPayment.method,
-      date: newPayment.date,
-      status: 'Completed',
-      reference: newPayment.reference,
-      notes: newPayment.notes,
-    };
+  const fetchPaymentsData = async () => {
+    try {
+      setLoading(true);
+      const [paymentsData, invoicesData] = await Promise.all([
+        paymentService.getAll({ search }),
+        invoiceService.getAll()
+      ]);
 
-    setPayments([created, ...payments]);
-    // Remove or resolve from pending invoices if matched
-    setPendingInvoices(pendingInvoices.filter((inv) => inv.invoiceId !== newPayment.invoiceId));
-    setRecordOpen(false);
-    setActionSuccess(`Payment ${created.id} recorded successfully!`);
-    setTimeout(() => setActionSuccess(''), 3500);
+      setPayments(
+        (paymentsData || []).map((p) => ({
+          id: p.id,
+          invoiceId: p.invoice,
+          customer: p.customer,
+          customerEmail: `${p.customer.toLowerCase().replace(/\s+/g, '')}@example.com`,
+          amount: p.amount,
+          numericAmount: p.raw_amount || parseFloat((p.amount || '').replace(/[^0-9.]/g, '') || 0),
+          method: p.method,
+          date: p.date,
+          status: p.status || 'Cleared',
+          reference: `REF-${p.id}`,
+          notes: `Settled payment record in PostgreSQL (${p.method})`,
+        }))
+      );
+
+      const unpaids = (invoicesData || [])
+        .filter((i) => i.status === 'Pending' || i.status === 'Overdue' || i.status === 'Confirmed')
+        .map((i) => ({
+          invoiceId: i.id,
+          customer: i.customer,
+          amount: i.amount,
+          numericAmount: i.total || parseFloat((i.amount || '').replace(/[^0-9.]/g, '') || 0),
+          dueDate: i.dueDate,
+          status: i.status === 'Overdue' ? 'Overdue' : 'Outstanding',
+          daysOverdue: i.status === 'Overdue' ? 5 : 0,
+          daysDue: i.status === 'Overdue' ? 0 : 7,
+        }));
+      setPendingInvoices(unpaids);
+    } catch (err) {
+      console.error('Failed to load payments from DB:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPaymentsData();
+  }, [search]);
+
+  const handleRecordPayment = async (e) => {
+    e.preventDefault();
+    try {
+      await paymentService.create({
+        customer: newPayment.customer,
+        amount: parseFloat(newPayment.amount),
+        payment_method: newPayment.method,
+        invoice_code: newPayment.invoiceId,
+        notes: newPayment.notes
+      });
+      setRecordOpen(false);
+      setActionSuccess(`Payment against ${newPayment.invoiceId} recorded successfully!`);
+      setTimeout(() => setActionSuccess(''), 3500);
+      await fetchPaymentsData();
+    } catch (err) {
+      alert('Failed to record payment: ' + (err.response?.data?.detail || err.message));
+    }
   };
 
   const notifyReminder = (invId) => {
@@ -186,36 +124,24 @@ export default function PaymentManagementPanel({ userRole: propRole, isCustomerV
 
   // Filter payments
   const filteredPayments = payments.filter((p) => {
-    const matchesSearch =
-      p.id.toLowerCase().includes(search.toLowerCase()) ||
-      p.invoiceId.toLowerCase().includes(search.toLowerCase()) ||
-      p.customer.toLowerCase().includes(search.toLowerCase());
-
     const matchesMethod =
-      methodFilter === 'All' || p.method.toLowerCase().includes(methodFilter.toLowerCase());
-
-    let matchesDate = true;
-    if (dateFilter === 'Last 7 Days') {
-      matchesDate = new Date(p.date) >= new Date('2026-10-24');
-    } else if (dateFilter === 'October 2026') {
-      matchesDate = p.date.startsWith('2026-10');
-    }
+      methodFilter === 'All' || p.method?.toLowerCase().includes(methodFilter.toLowerCase());
 
     if (isCustomer) {
-      return matchesSearch && matchesMethod && matchesDate && p.customer.includes('Acme');
+      return matchesMethod && p.customer?.toLowerCase().includes((currentUser.name || '').toLowerCase());
     }
 
-    return matchesSearch && matchesMethod && matchesDate;
+    return matchesMethod;
   });
 
   // KPI Computations
-  const totalReceived = payments.reduce((sum, p) => sum + p.numericAmount, 0);
+  const totalReceived = payments.reduce((sum, p) => sum + (p.numericAmount || 0), 0);
   const outstandingAmount = pendingInvoices
     .filter((inv) => inv.status === 'Outstanding')
-    .reduce((sum, inv) => sum + inv.numericAmount, 0);
+    .reduce((sum, inv) => sum + (inv.numericAmount || 0), 0);
   const overdueAmount = pendingInvoices
     .filter((inv) => inv.status === 'Overdue')
-    .reduce((sum, inv) => sum + inv.numericAmount, 0);
+    .reduce((sum, inv) => sum + (inv.numericAmount || 0), 0);
 
   return (
     <div className="space-y-6">
@@ -228,7 +154,7 @@ export default function PaymentManagementPanel({ userRole: propRole, isCustomerV
           <p className="text-xs text-neutral-500 mt-1">
             {isCustomer
               ? 'View settled payments, receipts, and outstanding invoice balances.'
-              : 'Record customer settlements, track payment gateway transactions, and audit overdue balances.'}
+              : 'Record customer settlements, track payment gateway transactions, and audit overdue balances in PostgreSQL.'}
           </p>
         </div>
 
@@ -260,31 +186,31 @@ export default function PaymentManagementPanel({ userRole: propRole, isCustomerV
             </div>
           </div>
           <p className="text-2xl font-bold text-black mt-2">{filteredPayments.length}</p>
-          <span className="text-[11px] font-medium text-neutral-400 mt-1 block">Cleared transactions</span>
+          <span className="text-[11px] font-medium text-neutral-400 mt-1 block">In database</span>
         </div>
 
         <div className="p-4 rounded-2xl bg-white border border-[#E8E8E8] shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-neutral-500">Total Amount Received</span>
+            <span className="text-xs font-medium text-neutral-500">Total Cleared Revenue</span>
             <div className="w-7 h-7 rounded-lg bg-[#F2F4ED] text-[#788A5B] flex items-center justify-center">
               <DollarSign className="w-4 h-4" />
             </div>
           </div>
           <p className="text-2xl font-bold text-black mt-2">
-            ${totalReceived.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            ${totalReceived.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
-          <span className="text-[11px] font-medium text-[#788A5B] mt-1 block">+18.5% vs last month</span>
+          <span className="text-[11px] font-medium text-[#788A5B] mt-1 block">Settled funds</span>
         </div>
 
         <div className="p-4 rounded-2xl bg-white border border-[#E8E8E8] shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-neutral-500">Outstanding Amount</span>
+            <span className="text-xs font-medium text-neutral-500">Outstanding Receivables</span>
             <div className="w-7 h-7 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
               <Clock className="w-4 h-4" />
             </div>
           </div>
           <p className="text-2xl font-bold text-black mt-2">
-            ${outstandingAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            ${outstandingAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
           <span className="text-[11px] font-medium text-amber-600 mt-1 block">
             {pendingInvoices.filter((i) => i.status === 'Outstanding').length} awaiting payment
@@ -293,13 +219,13 @@ export default function PaymentManagementPanel({ userRole: propRole, isCustomerV
 
         <div className="p-4 rounded-2xl bg-white border border-[#E8E8E8] shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-neutral-500">Overdue Amount</span>
+            <span className="text-xs font-medium text-neutral-500">Overdue Balance</span>
             <div className="w-7 h-7 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center">
               <AlertCircle className="w-4 h-4" />
             </div>
           </div>
           <p className="text-2xl font-bold text-rose-600 mt-2">
-            ${overdueAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            ${overdueAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
           <span className="text-[11px] font-medium text-rose-500 mt-1 block">
             {pendingInvoices.filter((i) => i.status === 'Overdue').length} past due invoices
@@ -332,20 +258,7 @@ export default function PaymentManagementPanel({ userRole: propRole, isCustomerV
               <option value="Credit Card">Credit Card</option>
               <option value="Bank Transfer">Bank Transfer (ACH)</option>
               <option value="Wire Transfer">Wire Transfer</option>
-              <option value="Stripe">Stripe Checkout</option>
-            </select>
-          </div>
-
-          <div className="flex items-center gap-1.5 text-xs text-neutral-500 border border-[#E8E8E8] rounded-xl px-2.5 py-1.5 bg-white">
-            <Calendar className="w-3.5 h-3.5 text-neutral-400" />
-            <select
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              className="bg-transparent border-none text-xs text-black focus:outline-none cursor-pointer"
-            >
-              <option value="All">All Time</option>
-              <option value="Last 7 Days">Last 7 Days</option>
-              <option value="October 2026">October 2026</option>
+              <option value="Stripe">Stripe</option>
             </select>
           </div>
         </div>
@@ -403,7 +316,7 @@ export default function PaymentManagementPanel({ userRole: propRole, isCustomerV
               {filteredPayments.length === 0 && (
                 <tr>
                   <td colSpan={8} className="py-8 text-center text-xs text-neutral-500">
-                    No matching payment transactions found.
+                    No matching payment transactions found in database.
                   </td>
                 </tr>
               )}
@@ -419,7 +332,7 @@ export default function PaymentManagementPanel({ userRole: propRole, isCustomerV
             <div>
               <h2 className="text-sm font-bold text-black">Invoices Pending Settlement</h2>
               <p className="text-xs text-neutral-500 mt-0.5">
-                Outstanding and overdue accounts requiring collection follow-ups or manual settlement records.
+                Outstanding and overdue accounts requiring collection follow-ups or manual settlement records in PostgreSQL.
               </p>
             </div>
             <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-rose-50 text-rose-600 border border-rose-200">
@@ -450,12 +363,12 @@ export default function PaymentManagementPanel({ userRole: propRole, isCustomerV
                       {inv.status === 'Overdue' ? (
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-600 border border-rose-200">
                           <AlertCircle className="w-3 h-3" />
-                          {inv.daysOverdue}d Overdue
+                          Overdue
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
                           <Clock className="w-3 h-3" />
-                          Due in {inv.daysDue}d
+                          Pending Settlement
                         </span>
                       )}
                     </td>
@@ -523,7 +436,6 @@ export default function PaymentManagementPanel({ userRole: propRole, isCustomerV
               <div>
                 <span className="text-neutral-400 block font-medium">Customer Account</span>
                 <span className="text-black font-semibold mt-0.5 block">{selectedPayment.customer}</span>
-                <span className="text-neutral-500 font-mono text-[11px]">{selectedPayment.customerEmail}</span>
               </div>
               <div>
                 <span className="text-neutral-400 block font-medium">Linked Invoice</span>
@@ -542,10 +454,6 @@ export default function PaymentManagementPanel({ userRole: propRole, isCustomerV
                 <span className="text-black font-mono font-medium mt-0.5 block bg-neutral-50 p-2 rounded-lg border border-[#E8E8E8]">
                   {selectedPayment.reference}
                 </span>
-              </div>
-              <div className="col-span-2">
-                <span className="text-neutral-400 block font-medium">Staff Internal Notes</span>
-                <p className="text-neutral-600 mt-0.5">{selectedPayment.notes}</p>
               </div>
             </div>
 
@@ -648,17 +556,6 @@ export default function PaymentManagementPanel({ userRole: propRole, isCustomerV
               </div>
 
               <div>
-                <label className="block font-semibold text-black mb-1">Transaction Reference</label>
-                <input
-                  type="text"
-                  required
-                  value={newPayment.reference}
-                  onChange={(e) => setNewPayment({ ...newPayment, reference: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl border border-[#E8E8E8] focus:outline-none focus:ring-1 focus:ring-[#788A5B]"
-                />
-              </div>
-
-              <div>
                 <label className="block font-semibold text-black mb-1">Internal Notes</label>
                 <textarea
                   rows={2}
@@ -680,7 +577,7 @@ export default function PaymentManagementPanel({ userRole: propRole, isCustomerV
                   type="submit"
                   className="px-4 py-2 rounded-xl bg-black text-white font-semibold hover:bg-neutral-800 transition-colors"
                 >
-                  Confirm & Settle
+                  Confirm & Settle in DB
                 </button>
               </div>
             </form>

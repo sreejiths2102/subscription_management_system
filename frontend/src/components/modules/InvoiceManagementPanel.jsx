@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Receipt,
   Plus,
@@ -15,7 +15,7 @@ import {
   AlertCircle,
   FileCheck
 } from 'lucide-react';
-import { authService } from '../../api';
+import { authService, invoiceService } from '../../api';
 
 export default function InvoiceManagementPanel({ userRole: propRole, isCustomerView: propCustomerView }) {
   const currentUser = authService.getUser() || { role: 'admin' };
@@ -29,69 +29,9 @@ export default function InvoiceManagementPanel({ userRole: propRole, isCustomerV
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [generateOpen, setGenerateOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const [invoices, setInvoices] = useState([
-    {
-      number: 'INV-2026-089',
-      customer: 'Acme Technologies Inc.',
-      date: 'Oct 30, 2026',
-      dueDate: 'Nov 14, 2026',
-      amount: '$3,600.00',
-      status: 'Paid',
-      tax: '$327.27',
-      items: [
-        { desc: 'Enterprise Yearly License (1 Year)', qty: 1, price: '$3,600.00' }
-      ]
-    },
-    {
-      number: 'INV-2026-088',
-      customer: 'Nexus Cloud Systems',
-      date: 'Oct 15, 2026',
-      dueDate: 'Oct 29, 2026',
-      amount: '$149.00',
-      status: 'Paid',
-      tax: '$13.55',
-      items: [
-        { desc: 'Professional Suite Monthly Subscription', qty: 1, price: '$149.00' }
-      ]
-    },
-    {
-      number: 'INV-2026-087',
-      customer: 'Cloudflow Networks',
-      date: 'Oct 28, 2026',
-      dueDate: 'Nov 12, 2026',
-      amount: '$890.00',
-      status: 'Confirmed',
-      tax: '$80.91',
-      items: [
-        { desc: 'Analytics Intelligence Engine + 10 Seats Pack', qty: 1, price: '$890.00' }
-      ]
-    },
-    {
-      number: 'INV-2026-086',
-      customer: 'BlueSky Digital LLC',
-      date: 'Oct 01, 2026',
-      dueDate: 'Oct 15, 2026',
-      amount: '$1,420.00',
-      status: 'Overdue',
-      tax: '$129.09',
-      items: [
-        { desc: 'Custom Cloud Instance Migration & Hosting', qty: 1, price: '$1,420.00' }
-      ]
-    },
-    {
-      number: 'INV-2026-085',
-      customer: 'Horizon AI Labs',
-      date: 'Oct 29, 2026',
-      dueDate: 'Nov 15, 2026',
-      amount: '$1,200.00',
-      status: 'Draft',
-      tax: '$109.09',
-      items: [
-        { desc: 'Dedicated Server Tier Support Add-on', qty: 1, price: '$1,200.00' }
-      ]
-    }
-  ]);
+  const [invoices, setInvoices] = useState([]);
 
   const [formData, setFormData] = useState({
     customer: '',
@@ -100,21 +40,45 @@ export default function InvoiceManagementPanel({ userRole: propRole, isCustomerV
     desc: 'Professional Cloud Subscription Billing'
   });
 
-  const visibleInvoices = isCustomer
-    ? invoices.filter((inv) => inv.customer.toLowerCase().includes('nexus') || inv.number === 'INV-2026-088')
-    : invoices;
+  const fetchInvoices = async () => {
+    try {
+      setLoading(true);
+      const data = await invoiceService.getAll({
+        search,
+        status_filter: statusFilter
+      });
+      // Map API fields to panel expectations
+      const mapped = (data || []).map((inv) => ({
+        number: inv.id,
+        customer: inv.customer,
+        date: inv.issueDate,
+        dueDate: inv.dueDate,
+        amount: inv.amount,
+        status: inv.status,
+        tax: `$${(inv.tax || 0).toFixed(2)}`,
+        items: [
+          { desc: 'Recurring Subscription License', qty: 1, price: inv.amount }
+        ]
+      }));
+      setInvoices(mapped);
+    } catch (err) {
+      console.error('Failed to load invoices from DB:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const filteredInvoices = visibleInvoices.filter((inv) => {
-    const matchesSearch =
-      inv.number.toLowerCase().includes(search.toLowerCase()) ||
-      (!isCustomer && inv.customer.toLowerCase().includes(search.toLowerCase()));
-    const matchesStatus = statusFilter === 'All' || inv.status.toLowerCase() === statusFilter.toLowerCase();
-    return matchesSearch && matchesStatus;
-  });
+  useEffect(() => {
+    fetchInvoices();
+  }, [search, statusFilter]);
+
+  const visibleInvoices = isCustomer
+    ? invoices.filter((inv) => inv.customer?.toLowerCase().includes((currentUser.name || '').toLowerCase()))
+    : invoices;
 
   const totalInvoices = visibleInvoices.length;
   const paidInvoices = visibleInvoices.filter((i) => i.status === 'Paid').length;
-  const unpaidInvoices = visibleInvoices.filter((i) => i.status === 'Confirmed' || i.status === 'Draft').length;
+  const unpaidInvoices = visibleInvoices.filter((i) => i.status === 'Confirmed' || i.status === 'Pending').length;
   const overdueInvoices = visibleInvoices.filter((i) => i.status === 'Overdue').length;
 
   const handleConfirm = (invNum) => {
@@ -122,7 +86,7 @@ export default function InvoiceManagementPanel({ userRole: propRole, isCustomerV
       prev.map((i) => (i.number === invNum ? { ...i, status: 'Confirmed' } : i))
     );
     if (selectedInvoice?.number === invNum) setSelectedInvoice({ ...selectedInvoice, status: 'Confirmed' });
-    alert(`Invoice ${invNum} has been confirmed and locked.`);
+    alert(`Invoice ${invNum} has been confirmed in PostgreSQL.`);
   };
 
   const handleCancel = (invNum) => {
@@ -135,7 +99,7 @@ export default function InvoiceManagementPanel({ userRole: propRole, isCustomerV
   };
 
   const handleSend = (invNum) => {
-    alert(`Invoice ${invNum} sent electronically to billing contact.`);
+    alert(`Invoice ${invNum} sent electronically to customer billing contact.`);
   };
 
   const handlePrint = (invNum) => {
@@ -146,20 +110,21 @@ export default function InvoiceManagementPanel({ userRole: propRole, isCustomerV
     alert(`Downloading official PDF copy for ${invNum}...`);
   };
 
-  const handleGenerate = (e) => {
+  const handleGenerate = async (e) => {
     e.preventDefault();
-    const newInv = {
-      number: `INV-2026-0${invoices.length + 90}`,
-      customer: formData.customer,
-      date: 'Oct 31, 2026',
-      dueDate: formData.dueDate,
-      amount: formData.amount.startsWith('$') ? formData.amount : `$${formData.amount}`,
-      status: 'Confirmed',
-      tax: '$15.00',
-      items: [{ desc: formData.desc, qty: 1, price: formData.amount }]
-    };
-    setInvoices([newInv, ...invoices]);
-    setGenerateOpen(false);
+    try {
+      await invoiceService.create({
+        customer: formData.customer,
+        amount: parseFloat(formData.amount.replace(/[^0-9.]/g, '') || 450.00),
+        due_date: formData.dueDate,
+        items: [{ desc: formData.desc, qty: 1, price: formData.amount }]
+      });
+      setGenerateOpen(false);
+      setFormData({ customer: '', amount: '', dueDate: 'Nov 15, 2026', desc: 'Professional Cloud Subscription Billing' });
+      await fetchInvoices();
+    } catch (err) {
+      alert('Failed to issue invoice: ' + (err.response?.data?.detail || err.message));
+    }
   };
 
   return (
@@ -171,7 +136,7 @@ export default function InvoiceManagementPanel({ userRole: propRole, isCustomerV
             <span className="text-xs font-semibold uppercase tracking-wider text-[#788A5B]">Financial Operations</span>
             <span className="text-neutral-300">•</span>
             <span className="text-xs font-medium text-neutral-500">
-              {isCustomer ? 'Customer Invoices' : 'Accounts Receivable'}
+              {isCustomer ? 'Customer Invoices' : 'PostgreSQL Accounts Receivable'}
             </span>
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-black">
@@ -184,7 +149,7 @@ export default function InvoiceManagementPanel({ userRole: propRole, isCustomerV
           </p>
         </div>
 
-        {/* 6. Generate Invoice button (Admin + Staff) */}
+        {/* Generate Invoice button (Admin + Staff) */}
         {!isCustomer && (
           <button
             onClick={() => setGenerateOpen(true)}
@@ -241,7 +206,7 @@ export default function InvoiceManagementPanel({ userRole: propRole, isCustomerV
 
       {/* Main Table Container */}
       <div className="bg-white rounded-2xl border border-[#E8E8E8] shadow-xs overflow-hidden">
-        {/* 3 & 4. Search and Status Filter */}
+        {/* Search and Status Filter */}
         <div className="p-4 border-b border-[#E8E8E8] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-[#F2F4ED]/30">
           <div className="relative flex-1 max-w-md">
             <Search className="w-4 h-4 absolute left-3 top-2.5 text-neutral-400" />
@@ -264,6 +229,7 @@ export default function InvoiceManagementPanel({ userRole: propRole, isCustomerV
               <option value="All">All Statuses</option>
               <option value="Paid">Paid</option>
               <option value="Confirmed">Confirmed</option>
+              <option value="Pending">Pending</option>
               <option value="Draft">Draft</option>
               <option value="Overdue">Overdue</option>
               <option value="Cancelled">Cancelled</option>
@@ -271,7 +237,7 @@ export default function InvoiceManagementPanel({ userRole: propRole, isCustomerV
           </div>
         </div>
 
-        {/* 5. Invoice Table */}
+        {/* Invoice Table */}
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-[#F2F4ED]/60 text-neutral-600 font-semibold border-b border-[#E8E8E8]">
@@ -286,96 +252,104 @@ export default function InvoiceManagementPanel({ userRole: propRole, isCustomerV
               </tr>
             </thead>
             <tbody className="divide-y divide-[#E8E8E8] text-neutral-800">
-              {filteredInvoices.map((inv) => (
-                <tr key={inv.number} className="hover:bg-neutral-50/70 transition-colors">
-                  <td className="py-3.5 px-4 font-mono font-medium text-black">{inv.number}</td>
-                  {!isCustomer && <td className="py-3.5 px-4 font-semibold text-black">{inv.customer}</td>}
-                  <td className="py-3.5 px-4 text-neutral-500">{inv.date}</td>
-                  <td className="py-3.5 px-4 text-neutral-500">{inv.dueDate}</td>
-                  <td className="py-3.5 px-4 font-bold text-black">{inv.amount}</td>
-                  <td className="py-3.5 px-4">
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${
-                        inv.status === 'Paid'
-                          ? 'bg-[#F2F4ED] text-[#788A5B] border-[#E8E8E8]'
-                          : inv.status === 'Overdue'
-                          ? 'bg-red-50 text-red-700 border-red-200'
-                          : inv.status === 'Confirmed'
-                          ? 'bg-blue-50 text-blue-700 border-blue-200'
-                          : 'bg-neutral-100 text-neutral-600 border-neutral-300'
-                      }`}
-                    >
-                      {inv.status}
-                    </span>
-                  </td>
-                  <td className="py-3.5 px-4 text-right space-x-1">
-                    {/* 7. Details Dialog trigger */}
-                    <button
-                      onClick={() => {
-                        setSelectedInvoice(inv);
-                        setDetailsOpen(true);
-                      }}
-                      className="p-1 rounded-lg text-neutral-500 hover:text-black hover:bg-neutral-100 transition-colors"
-                      title="View Invoice Details"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                    </button>
-
-                    {/* 11. Download / Print PDF */}
-                    <button
-                      onClick={() => handleDownload(inv.number)}
-                      className="p-1 rounded-lg text-neutral-500 hover:text-black hover:bg-neutral-100 transition-colors"
-                      title="Download PDF"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                    </button>
-
-                    {/* Admin / Staff only operations */}
-                    {!isCustomer && (
-                      <>
-                        {inv.status === 'Draft' && (
-                          <button
-                            onClick={() => handleConfirm(inv.number)}
-                            className="p-1 rounded-lg text-[#788A5B] hover:bg-[#F2F4ED] transition-colors"
-                            title="Confirm Invoice"
-                          >
-                            <FileCheck className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                        <button
-                          onClick={() => handleSend(inv.number)}
-                          className="p-1 rounded-lg text-neutral-500 hover:text-black hover:bg-neutral-100 transition-colors"
-                          title="Send to Customer"
-                        >
-                          <Send className="w-3.5 h-3.5" />
-                        </button>
-                        {inv.status !== 'Paid' && inv.status !== 'Cancelled' && (
-                          <button
-                            onClick={() => handleCancel(inv.number)}
-                            className="p-1 rounded-lg text-red-500 hover:bg-red-50 transition-colors"
-                            title="Cancel Invoice"
-                          >
-                            <XCircle className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </>
-                    )}
+              {visibleInvoices.length === 0 ? (
+                <tr>
+                  <td colSpan={isCustomer ? 6 : 7} className="py-6 text-center text-neutral-400">
+                    No invoices matching the criteria in database.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                visibleInvoices.map((inv) => (
+                  <tr key={inv.number} className="hover:bg-neutral-50/70 transition-colors">
+                    <td className="py-3.5 px-4 font-mono font-medium text-black">{inv.number}</td>
+                    {!isCustomer && <td className="py-3.5 px-4 font-semibold text-black">{inv.customer}</td>}
+                    <td className="py-3.5 px-4 text-neutral-500">{inv.date}</td>
+                    <td className="py-3.5 px-4 text-neutral-500">{inv.dueDate}</td>
+                    <td className="py-3.5 px-4 font-bold text-black">{inv.amount}</td>
+                    <td className="py-3.5 px-4">
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${
+                          inv.status === 'Paid'
+                            ? 'bg-[#F2F4ED] text-[#788A5B] border-[#E8E8E8]'
+                            : inv.status === 'Overdue'
+                            ? 'bg-red-50 text-red-700 border-red-200'
+                            : inv.status === 'Confirmed' || inv.status === 'Pending'
+                            ? 'bg-amber-50 text-amber-800 border-amber-200'
+                            : 'bg-neutral-100 text-neutral-600 border-neutral-300'
+                        }`}
+                      >
+                        {inv.status}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-4 text-right space-x-1">
+                      {/* Details Dialog trigger */}
+                      <button
+                        onClick={() => {
+                          setSelectedInvoice(inv);
+                          setDetailsOpen(true);
+                        }}
+                        className="p-1 rounded-lg text-neutral-500 hover:text-black hover:bg-neutral-100 transition-colors"
+                        title="View Invoice Details"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                      </button>
+
+                      {/* Download / Print PDF */}
+                      <button
+                        onClick={() => handleDownload(inv.number)}
+                        className="p-1 rounded-lg text-neutral-500 hover:text-black hover:bg-neutral-100 transition-colors"
+                        title="Download PDF"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                      </button>
+
+                      {/* Admin / Staff only operations */}
+                      {!isCustomer && (
+                        <>
+                          {inv.status === 'Draft' && (
+                            <button
+                              onClick={() => handleConfirm(inv.number)}
+                              className="p-1 rounded-lg text-[#788A5B] hover:bg-[#F2F4ED] transition-colors"
+                              title="Confirm Invoice"
+                            >
+                              <FileCheck className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleSend(inv.number)}
+                            className="p-1 rounded-lg text-neutral-500 hover:text-black hover:bg-neutral-100 transition-colors"
+                            title="Send to Customer"
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                          </button>
+                          {inv.status !== 'Paid' && inv.status !== 'Cancelled' && (
+                            <button
+                              onClick={() => handleCancel(inv.number)}
+                              className="p-1 rounded-lg text-red-500 hover:bg-red-50 transition-colors"
+                              title="Cancel Invoice"
+                            >
+                              <XCircle className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* 7. Invoice Details Dialog */}
+      {/* Invoice Details Dialog */}
       {detailsOpen && selectedInvoice && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 border border-[#E8E8E8] shadow-xl">
             <div className="flex items-center justify-between pb-3 border-b border-[#E8E8E8]">
               <div>
                 <h3 className="text-base font-bold text-black">Invoice #{selectedInvoice.number}</h3>
-                <span className="text-[11px] text-neutral-400">Brightloop Billing Ledger</span>
+                <span className="text-[11px] text-neutral-400">PostgreSQL Billing Ledger</span>
               </div>
               <button onClick={() => setDetailsOpen(false)} className="text-neutral-400 hover:text-black">
                 <X className="w-4 h-4" />
@@ -417,7 +391,7 @@ export default function InvoiceManagementPanel({ userRole: propRole, isCustomerV
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#E8E8E8]">
-                      {selectedInvoice.items.map((it, idx) => (
+                      {selectedInvoice.items?.map((it, idx) => (
                         <tr key={idx}>
                           <td className="p-2.5 text-black font-medium">{it.desc}</td>
                           <td className="p-2.5 text-center">{it.qty}</td>

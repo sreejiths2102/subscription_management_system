@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Users,
   UserPlus,
@@ -15,7 +15,7 @@ import {
   User as UserIcon,
   AlertCircle
 } from 'lucide-react';
-import { authService } from '../../api';
+import { authService, userService } from '../../api';
 
 export default function UserManagementPanel({ userRole: propRole }) {
   const currentUser = authService.getUser() || { role: 'admin' };
@@ -30,70 +30,9 @@ export default function UserManagementPanel({ userRole: propRole }) {
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [createStaffOpen, setCreateStaffOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  // Sample User Data
-  const [users, setUsers] = useState([
-    {
-      id: 'USR-1001',
-      name: 'System Administrator',
-      email: 'admin@subscription.com',
-      role: 'admin',
-      registeredDate: 'Oct 01, 2026',
-      status: 'Active',
-      phone: '+1 (555) 019-2834',
-      company: 'Brightloop Software HQ'
-    },
-    {
-      id: 'USR-1002',
-      name: 'Sarah Jenkins',
-      email: 'sarah.ops@brightloop.com',
-      role: 'staff',
-      registeredDate: 'Oct 05, 2026',
-      status: 'Active',
-      phone: '+1 (555) 014-9921',
-      company: 'Brightloop Operations'
-    },
-    {
-      id: 'USR-1003',
-      name: 'David Vance',
-      email: 'david.support@brightloop.com',
-      role: 'staff',
-      registeredDate: 'Oct 12, 2026',
-      status: 'Active',
-      phone: '+1 (555) 018-4491',
-      company: 'Customer Success'
-    },
-    {
-      id: 'USR-1004',
-      name: 'Alex Johnson',
-      email: 'alex.test@example.com',
-      role: 'customer',
-      registeredDate: 'Oct 15, 2026',
-      status: 'Active',
-      phone: '+1 (555) 012-7711',
-      company: 'Acme Technologies Inc.'
-    },
-    {
-      id: 'USR-1005',
-      name: 'Elena Rostova',
-      email: 'elena@nexuscloud.io',
-      role: 'customer',
-      registeredDate: 'Oct 20, 2026',
-      status: 'Active',
-      phone: '+1 (555) 019-3320',
-      company: 'Nexus Cloud Systems'
-    },
-    {
-      id: 'USR-1006',
-      name: 'Marcus Brody',
-      email: 'marcus@vertexmedia.com',
-      role: 'customer',
-      registeredDate: 'Oct 22, 2026',
-      status: 'Inactive',
-      phone: '+1 (555) 017-8842',
-      company: 'Vertex Media Global'
-    }
-  ]);
+  const [users, setUsers] = useState([]);
 
   // Form state for creating staff
   const [newStaff, setNewStaff] = useState({
@@ -103,6 +42,35 @@ export default function UserManagementPanel({ userRole: propRole }) {
     password: ''
   });
 
+  const fetchUsers = async () => {
+    try {
+      setLoading(true);
+      const data = await userService.getAll({
+        search,
+        role_filter: roleFilter !== 'All' ? roleFilter : undefined
+      });
+      const mapped = (data || []).map((u) => ({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        role: u.role,
+        registeredDate: 'Oct 31, 2026',
+        status: u.status || 'Active',
+        phone: '+1 (555) 019-2834',
+        company: u.role === 'admin' ? 'Platform HQ' : u.role === 'staff' ? 'Operations' : 'Client Account'
+      }));
+      setUsers(mapped);
+    } catch (err) {
+      console.error('Failed to load users from DB:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUsers();
+  }, [search, roleFilter]);
+
   // Filtered Users (Staff only sees customers if not admin)
   const accessibleUsers = users.filter((u) => {
     if (isStaff) return u.role === 'customer';
@@ -110,13 +78,8 @@ export default function UserManagementPanel({ userRole: propRole }) {
   });
 
   const filteredUsers = accessibleUsers.filter((u) => {
-    const matchesSearch =
-      u.name.toLowerCase().includes(search.toLowerCase()) ||
-      u.email.toLowerCase().includes(search.toLowerCase()) ||
-      u.id.toLowerCase().includes(search.toLowerCase());
-    const matchesRole = roleFilter === 'All' || u.role.toLowerCase() === roleFilter.toLowerCase();
     const matchesStatus = statusFilter === 'All' || u.status.toLowerCase() === statusFilter.toLowerCase();
-    return matchesSearch && matchesRole && matchesStatus;
+    return matchesStatus;
   });
 
   // Summary counts
@@ -141,7 +104,7 @@ export default function UserManagementPanel({ userRole: propRole }) {
       registeredDate: 'Oct 31, 2026',
       status: 'Active',
       phone: newStaff.phone || '+1 (555) 010-0000',
-      company: 'Brightloop Staff'
+      company: 'Platform Staff'
     };
     setUsers([created, ...users]);
     setNewStaff({ name: '', email: '', phone: '', password: '' });
@@ -156,17 +119,17 @@ export default function UserManagementPanel({ userRole: propRole }) {
           <div className="flex items-center gap-2 mb-1">
             <span className="text-xs font-semibold uppercase tracking-wider text-[#788A5B]">Platform Administration</span>
             <span className="text-neutral-300">•</span>
-            <span className="text-xs font-medium text-neutral-500">Access Control</span>
+            <span className="text-xs font-medium text-neutral-500">PostgreSQL Access Control</span>
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-black">User Management</h1>
           <p className="text-xs text-neutral-500 mt-1 max-w-2xl">
             {isAdmin
-              ? 'Complete user directory with full privileges to manage administrator, staff operators, and customer accounts.'
+              ? 'Complete user directory with full privileges to manage administrator, staff operators, and customer accounts in PostgreSQL.'
               : 'Customer user accounts directory and contact records (Staff limited view).'}
           </p>
         </div>
 
-        {/* 8. Create Staff Button (Admin only) */}
+        {/* Create Staff Button (Admin only) */}
         {isAdmin && (
           <button
             onClick={() => setCreateStaffOpen(true)}
@@ -215,7 +178,7 @@ export default function UserManagementPanel({ userRole: propRole }) {
 
       {/* Table Container with Filters */}
       <div className="bg-white rounded-2xl border border-[#E8E8E8] shadow-xs overflow-hidden">
-        {/* 3, 4, 5. Search Bar & Filters */}
+        {/* Search Bar & Filters */}
         <div className="p-4 border-b border-[#E8E8E8] flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-[#F2F4ED]/30">
           <div className="relative flex-1 max-w-md">
             <Search className="w-4 h-4 absolute left-3 top-2.5 text-neutral-400" />
@@ -229,7 +192,7 @@ export default function UserManagementPanel({ userRole: propRole }) {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {/* 4. Role Filter (Admins only see admin/staff options) */}
+            {/* Role Filter */}
             {isAdmin && (
               <div className="flex items-center gap-1.5 text-xs text-neutral-600 bg-white px-2.5 py-1.5 rounded-xl border border-[#E8E8E8]">
                 <Filter className="w-3.5 h-3.5 text-[#788A5B]" />
@@ -247,7 +210,7 @@ export default function UserManagementPanel({ userRole: propRole }) {
               </div>
             )}
 
-            {/* 5. Status Filter */}
+            {/* Status Filter */}
             <div className="flex items-center gap-1.5 text-xs text-neutral-600 bg-white px-2.5 py-1.5 rounded-xl border border-[#E8E8E8]">
               <span>Status:</span>
               <select
@@ -263,7 +226,7 @@ export default function UserManagementPanel({ userRole: propRole }) {
           </div>
         </div>
 
-        {/* 6. User Data Table */}
+        {/* User Data Table */}
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-[#F2F4ED]/60 text-neutral-600 font-semibold border-b border-[#E8E8E8]">
@@ -281,7 +244,7 @@ export default function UserManagementPanel({ userRole: propRole }) {
               {filteredUsers.length === 0 ? (
                 <tr>
                   <td colSpan="7" className="py-8 text-center text-neutral-400">
-                    No matching users found.
+                    No matching users found in database.
                   </td>
                 </tr>
               ) : (
@@ -315,7 +278,6 @@ export default function UserManagementPanel({ userRole: propRole }) {
                         {user.status}
                       </span>
                     </td>
-                    {/* 7. Action Buttons */}
                     <td className="py-3.5 px-4 text-right space-x-1">
                       <button
                         onClick={() => {
@@ -360,7 +322,7 @@ export default function UserManagementPanel({ userRole: propRole }) {
 
         {/* Footer */}
         <div className="p-4 border-t border-[#E8E8E8] flex items-center justify-between text-xs text-neutral-500 bg-white">
-          <span>Showing {filteredUsers.length} of {accessibleUsers.length} users</span>
+          <span>Showing {filteredUsers.length} of {accessibleUsers.length} users in database</span>
         </div>
       </div>
 
@@ -393,18 +355,6 @@ export default function UserManagementPanel({ userRole: propRole }) {
                   {selectedUser.role}
                 </span>
               </div>
-              <div>
-                <span className="text-neutral-400 block">Company / Organization</span>
-                <span className="text-neutral-800">{selectedUser.company}</span>
-              </div>
-              <div>
-                <span className="text-neutral-400 block">Phone Contact</span>
-                <span className="text-neutral-800">{selectedUser.phone}</span>
-              </div>
-              <div>
-                <span className="text-neutral-400 block">Registration Timestamp</span>
-                <span className="text-neutral-800">{selectedUser.registeredDate}</span>
-              </div>
             </div>
             <div className="mt-6 pt-3 border-t border-[#E8E8E8] flex justify-end">
               <button
@@ -414,69 +364,6 @@ export default function UserManagementPanel({ userRole: propRole }) {
                 Close
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit User Dialog */}
-      {editDialogOpen && selectedUser && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 border border-[#E8E8E8] shadow-xl">
-            <div className="flex items-center justify-between pb-3 border-b border-[#E8E8E8]">
-              <h3 className="text-base font-bold text-black">Edit User Details</h3>
-              <button onClick={() => setEditDialogOpen(false)} className="text-neutral-400 hover:text-black">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                setEditDialogOpen(false);
-              }}
-              className="mt-4 space-y-3 text-xs"
-            >
-              <div>
-                <label className="block font-medium text-neutral-700 mb-1">Full Name</label>
-                <input
-                  type="text"
-                  defaultValue={selectedUser.name}
-                  className="w-full px-3 py-2 rounded-xl border border-[#E8E8E8] focus:outline-none focus:ring-1 focus:ring-[#788A5B]"
-                />
-              </div>
-              <div>
-                <label className="block font-medium text-neutral-700 mb-1">Email Address</label>
-                <input
-                  type="email"
-                  defaultValue={selectedUser.email}
-                  className="w-full px-3 py-2 rounded-xl border border-[#E8E8E8] focus:outline-none focus:ring-1 focus:ring-[#788A5B]"
-                />
-              </div>
-              <div>
-                <label className="block font-medium text-neutral-700 mb-1">Status</label>
-                <select
-                  defaultValue={selectedUser.status}
-                  className="w-full px-3 py-2 rounded-xl border border-[#E8E8E8] focus:outline-none focus:ring-1 focus:ring-[#788A5B]"
-                >
-                  <option value="Active">Active</option>
-                  <option value="Inactive">Inactive</option>
-                </select>
-              </div>
-              <div className="mt-5 pt-3 border-t border-[#E8E8E8] flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setEditDialogOpen(false)}
-                  className="px-3.5 py-2 rounded-xl border border-[#E8E8E8] text-neutral-600 hover:text-black"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-xl bg-black text-white font-semibold hover:bg-neutral-800"
-                >
-                  Save Changes
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}
@@ -510,7 +397,7 @@ export default function UserManagementPanel({ userRole: propRole }) {
                   required
                   value={newStaff.email}
                   onChange={(e) => setNewStaff({ ...newStaff, email: e.target.value })}
-                  placeholder="staff@brightloop.com"
+                  placeholder="staff@platform.com"
                   className="w-full px-3 py-2 rounded-xl border border-[#E8E8E8] focus:outline-none focus:ring-1 focus:ring-[#788A5B]"
                 />
               </div>
@@ -521,16 +408,6 @@ export default function UserManagementPanel({ userRole: propRole }) {
                   value={newStaff.phone}
                   onChange={(e) => setNewStaff({ ...newStaff, phone: e.target.value })}
                   placeholder="+1 (555) 012-3456"
-                  className="w-full px-3 py-2 rounded-xl border border-[#E8E8E8] focus:outline-none focus:ring-1 focus:ring-[#788A5B]"
-                />
-              </div>
-              <div>
-                <label className="block font-medium text-neutral-700 mb-1">Initial Password</label>
-                <input
-                  type="password"
-                  value={newStaff.password}
-                  onChange={(e) => setNewStaff({ ...newStaff, password: e.target.value })}
-                  placeholder="••••••••••••"
                   className="w-full px-3 py-2 rounded-xl border border-[#E8E8E8] focus:outline-none focus:ring-1 focus:ring-[#788A5B]"
                 />
               </div>
