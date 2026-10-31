@@ -48,11 +48,11 @@ def get_admin_dashboard_metrics(
 
     # Outstanding payments = unpaid portion of invoices (Pending / Overdue)
     unpaid_invoices = db.query(Invoice).filter(Invoice.status.in_(["Pending", "Overdue"])).all()
-    outstanding_val = sum(float(inv.total_amount - (inv.paid_amount or 0.0)) for inv in unpaid_invoices)
+    outstanding_val = sum((float(inv.total_amount or 0.0) - float(inv.paid_amount or 0.0)) for inv in unpaid_invoices)
 
     # Overdue invoices
     overdue_invoices = db.query(Invoice).filter(Invoice.status == "Overdue").all()
-    overdue_val = sum(float(inv.total_amount - (inv.paid_amount or 0.0)) for inv in overdue_invoices)
+    overdue_val = sum((float(inv.total_amount or 0.0) - float(inv.paid_amount or 0.0)) for inv in overdue_invoices)
     overdue_count = len(overdue_invoices)
 
     # Subscription distribution breakdown
@@ -230,10 +230,10 @@ def get_staff_dashboard_metrics(
     pending_invoices = db.query(Invoice).filter(Invoice.status == "Pending").count()
 
     unpaid_invoices = db.query(Invoice).filter(Invoice.status.in_(["Pending", "Overdue"])).all()
-    outstanding_val = sum(float(inv.total_amount - (inv.paid_amount or 0.0)) for inv in unpaid_invoices)
+    outstanding_val = sum((float(inv.total_amount or 0.0) - float(inv.paid_amount or 0.0)) for inv in unpaid_invoices)
 
     overdue_invoices_count = db.query(Invoice).filter(Invoice.status == "Overdue").count()
-    overdue_val = sum(float(inv.total_amount - (inv.paid_amount or 0.0)) for inv in db.query(Invoice).filter(Invoice.status == "Overdue").all())
+    overdue_val = sum((float(inv.total_amount or 0.0) - float(inv.paid_amount or 0.0)) for inv in db.query(Invoice).filter(Invoice.status == "Overdue").all())
 
     # Real tasks from database
     tasks_db = db.query(StaffTask).order_by(StaffTask.id.asc()).all()
