@@ -4,6 +4,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Blank from './pages/Blank';
 import AdminPanel from './components/admin/AdminPanel';
+import StaffPanel from './components/staff/StaffPanel';
 import ProtectedRoute from './components/ProtectedRoute';
 
 export default function App() {
@@ -25,6 +26,18 @@ export default function App() {
           element={<Navigate to="/admin" replace />}
         />
         <Route
+          path="/staff"
+          element={
+            <ProtectedRoute>
+              <StaffPanel />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/staff-dashboard"
+          element={<Navigate to="/staff" replace />}
+        />
+        <Route
           path="/blank"
           element={
             <ProtectedRoute>
@@ -38,4 +51,3 @@ export default function App() {
     </BrowserRouter>
   );
 }
-
