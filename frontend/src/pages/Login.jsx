@@ -60,9 +60,11 @@ export default function Login() {
       localStorage.setItem('access_token', data.access_token);
       localStorage.setItem('user', JSON.stringify(data.user));
 
-      // Redirect admin to admin panel, otherwise redirect to /blank
+      // Redirect based on role:
       if (data.user?.role === 'admin') {
         navigate('/admin', { replace: true });
+      } else if (data.user?.role === 'customer') {
+        navigate('/customer', { replace: true });
       } else {
         navigate('/blank', { replace: true });
       }
