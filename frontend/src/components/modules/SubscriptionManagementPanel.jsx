@@ -101,13 +101,12 @@ export default function SubscriptionManagementPanel() {
           <td className="py-3.5 px-4 text-neutral-600">{sub.nextRenewal}</td>
           <td className="py-3.5 px-4">
             <span
-              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${
-                sub.status === 'Active'
+              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${sub.status === 'Active'
                   ? 'bg-[#F2F4ED] text-[#788A5B] border-[#E8E8E8]'
                   : sub.status === 'Upcoming Renewal'
-                  ? 'bg-blue-50 text-blue-700 border-blue-200'
-                  : 'bg-amber-50 text-amber-800 border-amber-200'
-              }`}
+                    ? 'bg-blue-50 text-blue-700 border-blue-200'
+                    : 'bg-amber-50 text-amber-800 border-amber-200'
+                }`}
             >
               {sub.status}
             </span>
