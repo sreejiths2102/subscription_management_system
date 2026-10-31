@@ -1,0 +1,69 @@
+# ============================================
+# Environment Variables & Secrets (NEVER PUSH)
+# ============================================
+.env
+*.env
+backend/.env
+frontend/.env
+*.env.local
+*.env.*.local
+
+# ============================================
+# Python Virtual Environments & Dependencies
+# ============================================
+venv/
+.venv/
+backend/venv/
+backend/.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# ============================================
+# Python Bytecode & Cache
+# ============================================
+__pycache__/
+backend/**/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+
+# ============================================
+# Node & Frontend Build Artifacts
+# ============================================
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+.vite/
+frontend/.vite/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ============================================
+# Database Local Cluster Data & Logs
+# ============================================
+.pgdata/
+*.log
+logfile
+
+# ============================================
+# OS & IDE Files
+# ============================================
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/launch.json
