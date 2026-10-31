@@ -55,23 +55,9 @@ The system supports three distinct user roles with strict Role-Based Access Cont
 
 ---
 
-## 3. Global Design System (Tokens & Theme)
 
-All pages adhere to the uniform SaaS visual design guidelines:
 
-| Element | Token / Value | Usage |
-|---|---|---|
-| **Primary Background** | `#FFFFFF` | Page canvas, modals, form inputs, and white card containers |
-| **Primary Buttons & Text** | `#000000` | Primary action buttons, dark headings, high-contrast typography |
-| **Accent Green** | `#788A5B` | Active state indicators, icons, subtle focus rings, success badges |
-| **Light Sage** | `#F2F4ED` | Badge fills, card highlights, table header backgrounds, active navigation |
-| **Border Gray** | `#E8E8E8` | Thin 1px borders, separators, input field boundaries |
-| **Typography** | Inter / System Sans | Clean, legible sans-serif hierarchy with generous whitespace |
-| **Radius** | `12px` to `16px` (`rounded-xl` / `rounded-2xl`) | Cards, inputs, buttons, and dialog containers |
-
----
-
-## 4. Key Functional Modules
+## 3. Key Functional Modules
 
 ### A. Authentication & Password Recovery
 - **User Registration (`/register`)**: Role selection (`customer` or `staff`), real-time password criteria validation (>8 characters, uppercase, lowercase, special character), Argon2 hashing.
@@ -101,7 +87,7 @@ All pages adhere to the uniform SaaS visual design guidelines:
 
 ---
 
-## 5. Project Directory Structure
+## 4. Project Directory Structure
 
 ```text
 subscription_ms/
@@ -168,7 +154,7 @@ subscription_ms/
 
 ---
 
-## 6. Installation & Setup Guide
+## 5. Installation & Setup Guide
 
 ### Prerequisites
 - **Python 3.10+** (tested on Python 3.13)
@@ -251,7 +237,7 @@ subscription_ms/
 
 ---
 
-## 7. Automated Testing & Verification
+## 6. Automated Testing & Verification
 
 ### Running Backend Tests
 Execute the automated test suite covering authentication, Argon2 hashing, validation rules, JWT verification, and password reset workflows:
@@ -272,7 +258,7 @@ npm run build
 
 ---
 
-## 8. License & Standards
+## 7. License & Standards
 
 - **Security Standard:** Argon2id password hashing, HTTP Bearer JWT tokens, automatic URI sanitization for database credentials.
 - **Design Standard:** Minimal SaaS White & Olive Green design system.
