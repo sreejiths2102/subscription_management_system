@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Percent,
   Plus,
@@ -7,62 +7,23 @@ import {
   Trash2,
   X,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
-import { authService } from '../../api';
+import { authService, taxService } from '../../api';
 
 export default function TaxManagementPanel({ userRole: propRole }) {
   const currentUser = authService.getUser() || { role: 'admin' };
   const role = propRole || currentUser.role || 'admin';
   const isAdmin = role === 'admin';
 
-  const [taxes, setTaxes] = useState([
-    {
-      id: 'TAX-001',
-      name: 'United Kingdom Standard VAT',
-      rate: '20.0%',
-      type: 'Value Added Tax (VAT)',
-      description: 'Standard VAT applied to all UK digital SaaS subscriptions.',
-      status: 'Active'
-    },
-    {
-      id: 'TAX-002',
-      name: 'India Integrated GST (IGST)',
-      rate: '18.0%',
-      type: 'Goods & Services Tax (GST)',
-      description: 'Standard interstate B2B/B2C cloud services tax.',
-      status: 'Active'
-    },
-    {
-      id: 'TAX-003',
-      name: 'California State Sales Tax',
-      rate: '8.75%',
-      type: 'Sales Tax',
-      description: 'California state, county, and local district digital tax.',
-      status: 'Active'
-    },
-    {
-      id: 'TAX-004',
-      name: 'European Union Cross-Border B2B',
-      rate: '0.0%',
-      type: 'Reverse Charge',
-      description: 'Valid VAT ID reverse charge mechanism for intra-community B2B.',
-      status: 'Active'
-    },
-    {
-      id: 'TAX-005',
-      name: 'Legacy Regional Surcharge',
-      rate: '2.5%',
-      type: 'Excise Surcharge',
-      description: 'Retired regional telecommunications digital fee.',
-      status: 'Inactive'
-    }
-  ]);
-
+  const [taxes, setTaxes] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [selectedTax, setSelectedTax] = useState(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
 
   const [formData, setFormData] = useState({
     id: '',
@@ -72,6 +33,22 @@ export default function TaxManagementPanel({ userRole: propRole }) {
     description: '',
     status: 'Active'
   });
+
+  const fetchTaxes = async () => {
+    try {
+      setLoading(true);
+      const data = await taxService.getAll();
+      setTaxes(data || []);
+    } catch (err) {
+      console.error('Failed to load taxes from DB:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchTaxes();
+  }, []);
 
   const handleOpenCreate = () => {
     setFormData({
@@ -87,25 +64,51 @@ export default function TaxManagementPanel({ userRole: propRole }) {
   };
 
   const handleOpenEdit = (tax) => {
-    setFormData(tax);
+    setFormData({
+      id: tax.id,
+      db_id: tax.db_id,
+      name: tax.name,
+      rate: tax.rate,
+      type: tax.type || 'Sales Tax',
+      description: tax.description || '',
+      status: tax.status || 'Active'
+    });
     setIsEditing(true);
     setDialogOpen(true);
   };
 
-  const handleDelete = (id) => {
-    if (window.confirm('Are you sure you want to delete / deactivate this tax rule?')) {
-      setTaxes(taxes.filter((t) => t.id !== id));
+  const handleDelete = async (tax) => {
+    if (!isAdmin) return;
+    if (window.confirm(`Are you sure you want to delete / deactivate tax rule ${tax.name} (${tax.id})?`)) {
+      try {
+        setActionLoading(true);
+        await taxService.delete(tax.db_id);
+        await fetchTaxes();
+      } catch (err) {
+        alert('Failed to deactivate tax rule: ' + (err.response?.data?.detail || err.message));
+      } finally {
+        setActionLoading(false);
+      }
     }
   };
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
-    if (isEditing) {
-      setTaxes(taxes.map((t) => (t.id === formData.id ? formData : t)));
-    } else {
-      setTaxes([...taxes, formData]);
+    if (!isAdmin) return;
+    try {
+      setActionLoading(true);
+      if (isEditing && formData.db_id) {
+        await taxService.update(formData.db_id, formData);
+      } else {
+        await taxService.create(formData);
+      }
+      setDialogOpen(false);
+      await fetchTaxes();
+    } catch (err) {
+      alert('Failed to save tax rule: ' + (err.response?.data?.detail || err.message));
+    } finally {
+      setActionLoading(false);
     }
-    setDialogOpen(false);
   };
 
   return (
@@ -116,105 +119,119 @@ export default function TaxManagementPanel({ userRole: propRole }) {
           <div className="flex items-center gap-2 mb-1">
             <span className="text-xs font-semibold uppercase tracking-wider text-[#788A5B]">Taxation & Compliance</span>
             <span className="text-neutral-300">•</span>
-            <span className="text-xs font-medium text-neutral-500">Jurisdiction Rules</span>
+            <span className="text-xs font-medium text-neutral-500">PostgreSQL Jurisdiction Rules</span>
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-black">Tax Management</h1>
           <p className="text-xs text-neutral-500 mt-1 max-w-2xl">
-            Configure regional VAT, GST, state sales tax percentage calculations, and cross-border reverse charges.
+            Configure regional VAT, GST, state sales tax percentage calculations, and cross-border reverse charges stored directly in PostgreSQL.
           </p>
         </div>
 
-        {/* 3. Create Tax Button */}
-        <button
-          onClick={handleOpenCreate}
-          className="px-4 py-2.5 rounded-xl bg-black text-white text-xs font-semibold hover:bg-neutral-800 transition-colors shadow-xs flex items-center gap-1.5 self-start sm:self-auto"
-        >
-          <Plus className="w-3.5 h-3.5 text-[#788A5B]" />
-          Create Tax Rule
-        </button>
+        {/* Create Tax Button */}
+        {isAdmin && (
+          <button
+            onClick={handleOpenCreate}
+            className="px-4 py-2.5 rounded-xl bg-black text-white text-xs font-semibold hover:bg-neutral-800 transition-colors shadow-xs flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5 text-[#788A5B]" />
+            Create Tax Rule
+          </button>
+        )}
       </div>
 
-      {/* 2. Tax Table */}
+      {/* Tax Table */}
       <div className="bg-white rounded-2xl border border-[#E8E8E8] shadow-xs overflow-hidden">
         <div className="p-4 border-b border-[#E8E8E8] bg-[#F2F4ED]/30">
           <span className="text-xs font-semibold text-neutral-700">Configured Tax Jurisdictions ({taxes.length})</span>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-[#F2F4ED]/60 text-neutral-600 font-semibold border-b border-[#E8E8E8]">
-              <tr>
-                <th className="py-3 px-4">Tax ID</th>
-                <th className="py-3 px-4">Tax Name</th>
-                <th className="py-3 px-4">Tax Rate</th>
-                <th className="py-3 px-4">Tax Type</th>
-                <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#E8E8E8] text-neutral-800">
-              {taxes.map((tax) => (
-                <tr key={tax.id} className="hover:bg-neutral-50/70 transition-colors">
-                  <td className="py-3.5 px-4 font-mono font-medium text-black">{tax.id}</td>
-                  <td className="py-3.5 px-4 font-medium text-black">{tax.name}</td>
-                  <td className="py-3.5 px-4 font-bold text-black">{tax.rate}</td>
-                  <td className="py-3.5 px-4 text-neutral-600">{tax.type}</td>
-                  <td className="py-3.5 px-4">
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${
-                        tax.status === 'Active'
-                          ? 'bg-[#F2F4ED] text-[#788A5B] border-[#E8E8E8]'
-                          : 'bg-neutral-100 text-neutral-600 border-neutral-300'
-                      }`}
-                    >
-                      {tax.status}
-                    </span>
-                  </td>
-                  <td className="py-3.5 px-4 text-right space-x-1">
-                    {/* 6. Tax Details dialog trigger */}
-                    <button
-                      onClick={() => {
-                        setSelectedTax(tax);
-                        setDetailsOpen(true);
-                      }}
-                      className="p-1 rounded-lg text-neutral-500 hover:text-black hover:bg-neutral-100 transition-colors"
-                      title="View Details"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                    </button>
-
-                    {/* 4. Edit Tax Button */}
-                    <button
-                      onClick={() => handleOpenEdit(tax)}
-                      className="p-1 rounded-lg text-neutral-500 hover:text-black hover:bg-neutral-100 transition-colors"
-                      title="Edit Tax Rule"
-                    >
-                      <Edit className="w-3.5 h-3.5" />
-                    </button>
-
-                    {/* 5. Delete / Deactivate Tax button */}
-                    <button
-                      onClick={() => handleDelete(tax.id)}
-                      className="p-1 rounded-lg text-neutral-500 hover:text-red-600 hover:bg-red-50 transition-colors"
-                      title="Delete / Deactivate"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </td>
+          {loading ? (
+            <div className="p-12 text-center text-xs text-neutral-400 flex flex-col items-center justify-center gap-2">
+              <Loader2 className="w-6 h-6 animate-spin text-[#788A5B]" />
+              <span>Loading tax rules from PostgreSQL database...</span>
+            </div>
+          ) : taxes.length === 0 ? (
+            <div className="p-12 text-center text-xs text-neutral-400">
+              No tax rules found in the database.
+            </div>
+          ) : (
+            <table className="w-full text-left text-xs">
+              <thead className="bg-[#F2F4ED]/60 text-neutral-600 font-semibold border-b border-[#E8E8E8]">
+                <tr>
+                  <th className="py-3 px-4">Tax ID</th>
+                  <th className="py-3 px-4">Tax Name</th>
+                  <th className="py-3 px-4">Tax Rate</th>
+                  <th className="py-3 px-4">Tax Type</th>
+                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-[#E8E8E8] text-neutral-800">
+                {taxes.map((tax) => (
+                  <tr key={tax.id} className="hover:bg-neutral-50/70 transition-colors">
+                    <td className="py-3.5 px-4 font-mono font-medium text-black">{tax.id}</td>
+                    <td className="py-3.5 px-4 font-medium text-black">{tax.name}</td>
+                    <td className="py-3.5 px-4 font-bold text-black">{tax.rate}</td>
+                    <td className="py-3.5 px-4 text-neutral-600">{tax.type}</td>
+                    <td className="py-3.5 px-4">
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${
+                          tax.status === 'Active'
+                            ? 'bg-[#F2F4ED] text-[#788A5B] border-[#E8E8E8]'
+                            : 'bg-neutral-100 text-neutral-600 border-neutral-300'
+                        }`}
+                      >
+                        {tax.status}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-4 text-right space-x-1">
+                      <button
+                        onClick={() => {
+                          setSelectedTax(tax);
+                          setDetailsOpen(true);
+                        }}
+                        className="p-1 rounded-lg text-neutral-500 hover:text-black hover:bg-neutral-100 transition-colors cursor-pointer"
+                        title="View Details"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                      </button>
+
+                      {isAdmin && (
+                        <>
+                          <button
+                            onClick={() => handleOpenEdit(tax)}
+                            className="p-1 rounded-lg text-neutral-500 hover:text-black hover:bg-neutral-100 transition-colors cursor-pointer"
+                            title="Edit Tax Rule"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                          </button>
+
+                          <button
+                            onClick={() => handleDelete(tax)}
+                            className="p-1 rounded-lg text-neutral-500 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                            title="Delete / Deactivate"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
 
-      {/* 6. Tax Details Dialog */}
+      {/* Tax Details Dialog */}
       {detailsOpen && selectedTax && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 border border-[#E8E8E8] shadow-xl">
             <div className="flex items-center justify-between pb-3 border-b border-[#E8E8E8]">
               <h3 className="text-base font-bold text-black">{selectedTax.name}</h3>
-              <button onClick={() => setDetailsOpen(false)} className="text-neutral-400 hover:text-black">
+              <button onClick={() => setDetailsOpen(false)} className="text-neutral-400 hover:text-black cursor-pointer">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -246,7 +263,7 @@ export default function TaxManagementPanel({ userRole: propRole }) {
             <div className="mt-6 pt-3 border-t border-[#E8E8E8] flex justify-end">
               <button
                 onClick={() => setDetailsOpen(false)}
-                className="px-4 py-2 rounded-xl bg-black text-white text-xs font-semibold hover:bg-neutral-800"
+                className="px-4 py-2 rounded-xl bg-black text-white text-xs font-semibold hover:bg-neutral-800 cursor-pointer"
               >
                 Close
               </button>
@@ -255,7 +272,7 @@ export default function TaxManagementPanel({ userRole: propRole }) {
         </div>
       )}
 
-      {/* 7. Create / Edit Tax Dialog */}
+      {/* Create / Edit Tax Dialog */}
       {dialogOpen && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 border border-[#E8E8E8] shadow-xl">
@@ -263,7 +280,7 @@ export default function TaxManagementPanel({ userRole: propRole }) {
               <h3 className="text-base font-bold text-black">
                 {isEditing ? `Edit Tax Rule #${formData.id}` : 'Create New Tax Rule'}
               </h3>
-              <button onClick={() => setDialogOpen(false)} className="text-neutral-400 hover:text-black">
+              <button onClick={() => setDialogOpen(false)} className="text-neutral-400 hover:text-black cursor-pointer">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -296,7 +313,7 @@ export default function TaxManagementPanel({ userRole: propRole }) {
                   <select
                     value={formData.type}
                     onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-[#E8E8E8] focus:outline-none focus:ring-1 focus:ring-[#788A5B]"
+                    className="w-full px-3 py-2 rounded-xl border border-[#E8E8E8] focus:outline-none focus:ring-1 focus:ring-[#788A5B] cursor-pointer"
                   >
                     <option value="Sales Tax">Sales Tax</option>
                     <option value="Value Added Tax (VAT)">Value Added Tax (VAT)</option>
@@ -310,7 +327,7 @@ export default function TaxManagementPanel({ userRole: propRole }) {
                 <select
                   value={formData.status}
                   onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl border border-[#E8E8E8] focus:outline-none focus:ring-1 focus:ring-[#788A5B]"
+                  className="w-full px-3 py-2 rounded-xl border border-[#E8E8E8] focus:outline-none focus:ring-1 focus:ring-[#788A5B] cursor-pointer"
                 >
                   <option value="Active">Active</option>
                   <option value="Inactive">Inactive</option>
@@ -330,12 +347,16 @@ export default function TaxManagementPanel({ userRole: propRole }) {
                 <button
                   type="button"
                   onClick={() => setDialogOpen(false)}
-                  className="px-3.5 py-2 rounded-xl border border-[#E8E8E8] text-neutral-600 hover:text-black"
+                  className="px-3.5 py-2 rounded-xl border border-[#E8E8E8] text-neutral-600 hover:text-black cursor-pointer"
                 >
                   Cancel
                 </button>
-                <button type="submit" className="px-4 py-2 rounded-xl bg-black text-white font-semibold hover:bg-neutral-800">
-                  Save Tax Rule
+                <button
+                  type="submit"
+                  disabled={actionLoading}
+                  className="px-4 py-2 rounded-xl bg-black text-white font-semibold hover:bg-neutral-800 cursor-pointer disabled:opacity-50"
+                >
+                  {actionLoading ? 'Saving...' : 'Save Tax Rule'}
                 </button>
               </div>
             </form>

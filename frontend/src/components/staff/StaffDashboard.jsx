@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Users,
   RefreshCw,
@@ -22,12 +22,36 @@ import {
   ShieldCheck,
   DollarSign
 } from 'lucide-react';
+import { dashboardService, taskService } from '../../api';
+
+const KPI_ICONS = {
+  'total-customers': Users,
+  'active-subscriptions': RefreshCw,
+  'pending-quotations': FileText,
+  'pending-invoices': Receipt,
+  'outstanding-payments': CreditCard,
+  'overdue-invoices': AlertCircle,
+};
+
+const ALERT_ICONS = {
+  'upcoming-renewals': Clock,
+  'unpaid-invoices': Receipt,
+  'overdue-payments': AlertCircle,
+  'quotations-expiry': AlertTriangle,
+};
 
 export default function StaffDashboard({ onNavigate }) {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [taskFilter, setTaskFilter] = useState('All');
   const [taskSearch, setTaskSearch] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  const [summaryCards, setSummaryCards] = useState([]);
+  const [tasks, setTasks] = useState([]);
+  const [recentSubscriptions, setRecentSubscriptions] = useState([]);
+  const [recentPayments, setRecentPayments] = useState([]);
+  const [alerts, setAlerts] = useState([]);
 
   // Format current date
   const currentDate = new Date().toLocaleDateString('en-US', {
@@ -37,134 +61,47 @@ export default function StaffDashboard({ onNavigate }) {
     day: 'numeric',
   });
 
-  // B. Summary cards: 6 KPI cards for staff daily operations
-  const summaryCards = [
-    {
-      id: 'total-customers',
-      title: 'Total Customers',
-      value: '1,280',
-      badge: '+12 this month',
-      badgeType: 'neutral',
-      subtitle: 'Active customer accounts',
-      icon: Users,
-      moduleId: 'customers',
-    },
-    {
-      id: 'active-subscriptions',
-      title: 'Active Subscriptions',
-      value: '892',
-      badge: '98.2% retention',
-      badgeType: 'positive',
-      subtitle: 'Recurring active services',
-      icon: RefreshCw,
-      moduleId: 'subscriptions',
-    },
-    {
-      id: 'pending-quotations',
-      title: 'Pending Quotations',
-      value: '18',
-      badge: 'Requires review',
-      badgeType: 'warning',
-      subtitle: 'Price proposals awaiting staff',
-      icon: FileText,
-      moduleId: 'quotations',
-    },
-    {
-      id: 'pending-invoices',
-      title: 'Pending Invoices',
-      value: '14',
-      badge: 'Awaiting settlement',
-      badgeType: 'warning',
-      subtitle: 'Issued unpaid invoices',
-      icon: Receipt,
-      moduleId: 'invoices',
-    },
-    {
-      id: 'outstanding-payments',
-      title: 'Outstanding Payments',
-      value: '$6,450',
-      badge: '14 accounts',
-      badgeType: 'warning',
-      subtitle: 'Total receivables pending',
-      icon: CreditCard,
-      moduleId: 'payments',
-    },
-    {
-      id: 'overdue-invoices',
-      title: 'Overdue Invoices',
-      value: '5',
-      badge: 'Action needed',
-      badgeType: 'danger',
-      subtitle: 'Past payment due date',
-      icon: AlertCircle,
-      moduleId: 'invoices',
-    },
-  ];
+  const fetchStaffData = async () => {
+    try {
+      setLoading(true);
+      const data = await dashboardService.getStaff();
+      if (data) {
+        setSummaryCards(
+          (data.summary_cards || []).map((card) => ({
+            ...card,
+            icon: KPI_ICONS[card.id] || RefreshCw
+          }))
+        );
+        setTasks(data.tasks || []);
+        setRecentSubscriptions(data.recent_subscriptions || []);
+        setRecentPayments(data.recent_payments || []);
+        setAlerts(
+          (data.alerts || []).map((alert) => ({
+            ...alert,
+            icon: ALERT_ICONS[alert.id] || Clock
+          }))
+        );
+      }
+    } catch (err) {
+      console.error('Failed to load staff metrics from DB:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  // C. Pending tasks data
-  // Must include the exact requested rows:
-  // 1. Follow up invoice | ABC Ltd | 01-Nov | Pending
-  // 2. Review quotation | XYZ Ltd | 02-Nov | Pending
-  // 3. Subscription renewal | PQR Ltd | 03-Nov | Upcoming
-  const [tasks, setTasks] = useState([
-    {
-      id: 1,
-      task: 'Follow up invoice',
-      customer: 'ABC Ltd',
-      dueDate: '01-Nov',
-      status: 'Pending',
-      priority: 'High',
-      type: 'Invoice',
-    },
-    {
-      id: 2,
-      task: 'Review quotation',
-      customer: 'XYZ Ltd',
-      dueDate: '02-Nov',
-      status: 'Pending',
-      priority: 'Medium',
-      type: 'Quotation',
-    },
-    {
-      id: 3,
-      task: 'Subscription renewal',
-      customer: 'PQR Ltd',
-      dueDate: '03-Nov',
-      status: 'Upcoming',
-      priority: 'High',
-      type: 'Renewal',
-    },
-    {
-      id: 4,
-      task: 'Verify bank transfer payment',
-      customer: 'Nexus Cloud Systems',
-      dueDate: '04-Nov',
-      status: 'Pending',
-      priority: 'Normal',
-      type: 'Payment',
-    },
-    {
-      id: 5,
-      task: 'Account contact verification',
-      customer: 'Horizon AI Labs',
-      dueDate: '05-Nov',
-      status: 'Upcoming',
-      priority: 'Low',
-      type: 'Customer',
-    },
-  ]);
+  useEffect(() => {
+    fetchStaffData();
+  }, []);
 
-  const toggleTaskStatus = (taskId) => {
-    setTasks((prev) =>
-      prev.map((t) =>
-        t.id === taskId
-          ? {
-              ...t,
-              status: t.status === 'Completed' ? 'Pending' : 'Completed',
-            }
-          : t
-      )
-    );
+  const toggleTaskStatus = async (taskId) => {
+    try {
+      const updated = await taskService.toggle(taskId);
+      setTasks((prev) =>
+        prev.map((t) => (t.id === taskId ? { ...t, status: updated.status } : t))
+      );
+    } catch (err) {
+      console.error('Failed to toggle task in DB:', err);
+    }
   };
 
   const filteredTasks = tasks.filter((t) => {
@@ -178,153 +115,11 @@ export default function StaffDashboard({ onNavigate }) {
         : t.status === 'Completed';
 
     const matchesSearch =
-      t.task.toLowerCase().includes(taskSearch.toLowerCase()) ||
-      t.customer.toLowerCase().includes(taskSearch.toLowerCase());
+      (t.task || '').toLowerCase().includes(taskSearch.toLowerCase()) ||
+      (t.customer || '').toLowerCase().includes(taskSearch.toLowerCase());
 
     return matchesFilter && matchesSearch;
   });
-
-  // D. Recent Activity Data
-  // Recent Subscriptions
-  // - Subscription ID, Customer, Plan, Start Date, Status
-  const recentSubscriptions = [
-    {
-      id: 'SUB-2041',
-      customer: 'ABC Ltd',
-      plan: 'Enterprise Yearly',
-      startDate: '30-Oct-2026',
-      status: 'Active',
-    },
-    {
-      id: 'SUB-2040',
-      customer: 'XYZ Ltd',
-      plan: 'Pro Monthly',
-      startDate: '29-Oct-2026',
-      status: 'Active',
-    },
-    {
-      id: 'SUB-2039',
-      customer: 'PQR Ltd',
-      plan: 'Standard Monthly',
-      startDate: '28-Oct-2026',
-      status: 'Upcoming Renewal',
-    },
-    {
-      id: 'SUB-2038',
-      customer: 'Horizon AI Labs',
-      plan: 'Enterprise Quarterly',
-      startDate: '27-Oct-2026',
-      status: 'Active',
-    },
-    {
-      id: 'SUB-2037',
-      customer: 'Nexus Cloud Systems',
-      plan: 'Pro Monthly',
-      startDate: '25-Oct-2026',
-      status: 'Active',
-    },
-  ];
-
-  // Recent Payments
-  // - Payment ID, Customer, Amount, Payment Date, Method
-  const recentPayments = [
-    {
-      id: 'PAY-8822',
-      customer: 'ABC Ltd',
-      amount: '$2,450.00',
-      date: '31-Oct-2026',
-      method: 'Bank Transfer (ACH)',
-      status: 'Pending Verification',
-    },
-    {
-      id: 'PAY-8821',
-      customer: 'Acme Technologies Inc.',
-      amount: '$3,600.00',
-      date: '30-Oct-2026',
-      method: 'Stripe ACH Transfer',
-      status: 'Cleared',
-    },
-    {
-      id: 'PAY-8820',
-      customer: 'Nexus Cloud Systems',
-      amount: '$450.00',
-      date: '29-Oct-2026',
-      method: 'Credit Card (Visa)',
-      status: 'Cleared',
-    },
-    {
-      id: 'PAY-8819',
-      customer: 'Cloudflow Networks',
-      amount: '$890.00',
-      date: '28-Oct-2026',
-      method: 'Credit Card (Mastercard)',
-      status: 'Cleared',
-    },
-    {
-      id: 'PAY-8818',
-      customer: 'Horizon AI Labs',
-      amount: '$1,200.00',
-      date: '27-Oct-2026',
-      method: 'Direct Wire Settlement',
-      status: 'Cleared',
-    },
-  ];
-
-  // E. Alerts Section:
-  // - Upcoming renewals
-  // - Unpaid invoices
-  // - Overdue payments
-  // - Quotations nearing expiry
-  const alerts = [
-    {
-      id: 'upcoming-renewals',
-      title: 'Upcoming Renewals',
-      subtitle: '18 subscriptions due for renewal within 7 days',
-      detail: '$14,200 expected pipeline value',
-      icon: Clock,
-      badgeText: '18 Renewals',
-      badgeClass: 'bg-[#F2F4ED] text-[#788A5B] border-[#E8E8E8]',
-      actionLabel: 'View Subscriptions',
-      targetModule: 'subscriptions',
-      urgency: 'Medium',
-    },
-    {
-      id: 'unpaid-invoices',
-      title: 'Unpaid Invoices',
-      subtitle: '14 customer invoices awaiting payment settlement',
-      detail: '$6,450 total outstanding balance',
-      icon: Receipt,
-      badgeText: '14 Invoices',
-      badgeClass: 'bg-amber-50 text-amber-800 border-amber-200',
-      actionLabel: 'Manage Invoices',
-      targetModule: 'invoices',
-      urgency: 'High',
-    },
-    {
-      id: 'overdue-payments',
-      title: 'Overdue Payments',
-      subtitle: '5 invoices past 15-day grace period requiring collection',
-      detail: '$1,820 requires immediate follow-up',
-      icon: AlertCircle,
-      badgeText: '5 Overdue',
-      badgeClass: 'bg-red-50 text-red-700 border-red-200',
-      actionLabel: 'Follow Up Payments',
-      targetModule: 'payments',
-      urgency: 'Critical',
-    },
-    {
-      id: 'quotations-expiry',
-      title: 'Quotations Nearing Expiry',
-      subtitle: '4 enterprise price proposals expiring within 48 hours',
-      detail: '$30,900 quotation pipeline at risk',
-      icon: AlertTriangle,
-      badgeText: '4 Expiring',
-      badgeClass: 'bg-amber-50 text-amber-800 border-amber-200',
-      actionLabel: 'Review Quotations',
-      targetModule: 'quotations',
-      urgency: 'High',
-    },
-  ];
 
   const handleCardClick = (moduleId) => {
     if (onNavigate && moduleId) {
@@ -349,7 +144,7 @@ export default function StaffDashboard({ onNavigate }) {
               Operations Center
             </span>
             <span className="text-neutral-300">•</span>
-            <span className="text-xs font-medium text-neutral-500">Daily Queue</span>
+            <span className="text-xs font-medium text-neutral-500">PostgreSQL Live Data</span>
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-black">Staff Dashboard</h1>
           <p className="mt-1 text-xs sm:text-sm text-neutral-500">
@@ -358,6 +153,16 @@ export default function StaffDashboard({ onNavigate }) {
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Refresh button */}
+          <button
+            onClick={fetchStaffData}
+            title="Refresh database operational queue"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#E8E8E8] bg-white text-xs font-medium text-neutral-700 hover:bg-neutral-50 transition-colors shadow-2xs"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-[#788A5B] ${loading ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
+          </button>
+
           {/* Current Date Pill */}
           <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl border border-[#E8E8E8] bg-white text-xs font-medium text-neutral-700 shadow-2xs">
             <Calendar className="w-3.5 h-3.5 text-[#788A5B]" />
@@ -375,7 +180,9 @@ export default function StaffDashboard({ onNavigate }) {
               aria-label="Operational Notifications"
             >
               <Bell className="w-4 h-4" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#788A5B] ring-2 ring-white"></span>
+              {alerts.length > 0 && (
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#788A5B] ring-2 ring-white"></span>
+              )}
             </button>
 
             {notificationsOpen && (
@@ -385,43 +192,23 @@ export default function StaffDashboard({ onNavigate }) {
                     Operational Alerts
                   </span>
                   <span className="text-[11px] font-semibold text-[#788A5B] bg-[#F2F4ED] px-2 py-0.5 rounded-full">
-                    4 pending
+                    {alerts.length} pending
                   </span>
                 </div>
                 <div className="mt-3 space-y-2.5">
-                  <div className="p-2 rounded-xl hover:bg-[#F2F4ED]/50 transition-colors text-xs">
-                    <p className="font-semibold text-black flex items-center justify-between">
-                      <span>Follow up invoice ABC Ltd</span>
-                      <span className="text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
-                        Due 01-Nov
-                      </span>
-                    </p>
-                    <p className="text-neutral-500 text-[11px] mt-0.5">
-                      Invoice INV-2026-092 pending payment follow-up.
-                    </p>
-                  </div>
-                  <div className="p-2 rounded-xl hover:bg-[#F2F4ED]/50 transition-colors text-xs">
-                    <p className="font-semibold text-black flex items-center justify-between">
-                      <span>Review quotation XYZ Ltd</span>
-                      <span className="text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
-                        Due 02-Nov
-                      </span>
-                    </p>
-                    <p className="text-neutral-500 text-[11px] mt-0.5">
-                      Proposal for Enterprise Suite requires staff sign-off.
-                    </p>
-                  </div>
-                  <div className="p-2 rounded-xl hover:bg-[#F2F4ED]/50 transition-colors text-xs">
-                    <p className="font-semibold text-black flex items-center justify-between">
-                      <span>Subscription renewal PQR Ltd</span>
-                      <span className="text-[10px] text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
-                        Upcoming
-                      </span>
-                    </p>
-                    <p className="text-neutral-500 text-[11px] mt-0.5">
-                      Standard Monthly renewal scheduled for 03-Nov.
-                    </p>
-                  </div>
+                  {alerts.map((alt) => (
+                    <div key={alt.id} className="p-2 rounded-xl hover:bg-[#F2F4ED]/50 transition-colors text-xs">
+                      <p className="font-semibold text-black flex items-center justify-between">
+                        <span>{alt.title}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded border ${alt.badgeClass}`}>
+                          {alt.badgeText}
+                        </span>
+                      </p>
+                      <p className="text-neutral-500 text-[11px] mt-0.5">
+                        {alt.subtitle}
+                      </p>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
@@ -486,7 +273,7 @@ export default function StaffDashboard({ onNavigate }) {
           <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-600">
             Operational Summary
           </h2>
-          <span className="text-xs text-neutral-400">Click any card to inspect module</span>
+          <span className="text-xs text-neutral-400">Database synchronization active</span>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
@@ -549,7 +336,7 @@ export default function StaffDashboard({ onNavigate }) {
                 Action Queue
               </span>
               <span className="text-neutral-300">•</span>
-              <span className="text-xs font-medium text-neutral-500">Prioritized Daily Work</span>
+              <span className="text-xs font-medium text-neutral-500">Live PostgreSQL Records</span>
             </div>
             <h2 className="text-lg font-bold tracking-tight text-black">Pending Operational Tasks</h2>
           </div>
@@ -568,7 +355,7 @@ export default function StaffDashboard({ onNavigate }) {
             </div>
 
             <div className="flex items-center gap-1 p-0.5 rounded-xl border border-[#E8E8E8] bg-white">
-              {['All', 'Pending', 'Upcoming'].map((tab) => (
+              {['All', 'Pending', 'Upcoming', 'Completed'].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setTaskFilter(tab)}
@@ -656,7 +443,7 @@ export default function StaffDashboard({ onNavigate }) {
                         <span
                           className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${
                             isCompleted
-                              ? 'bg-neutral-100 text-neutral-600 border-neutral-300'
+                              ? 'bg-neutral-100 text-neutral-600 border-neutral-200'
                               : isPending
                               ? 'bg-amber-50 text-amber-800 border-amber-200'
                               : 'bg-blue-50 text-blue-700 border-blue-200'
@@ -668,15 +455,15 @@ export default function StaffDashboard({ onNavigate }) {
                       <td className="py-3.5 px-4 text-right">
                         <button
                           onClick={() => {
-                            if (t.type === 'Invoice' && onNavigate) onNavigate('invoices');
-                            else if (t.type === 'Quotation' && onNavigate) onNavigate('quotations');
-                            else if (t.type === 'Renewal' && onNavigate) onNavigate('subscriptions');
-                            else alert(`Action triggered for ${t.task} (${t.customer})`);
+                            if (t.type === 'Invoice') onNavigate('invoices');
+                            else if (t.type === 'Quotation') onNavigate('quotations');
+                            else if (t.type === 'Renewal') onNavigate('subscriptions');
+                            else if (t.type === 'Payment') onNavigate('payments');
+                            else onNavigate('customers');
                           }}
-                          className="px-3 py-1 rounded-xl border border-[#E8E8E8] bg-white text-xs font-semibold text-black hover:bg-[#F2F4ED] hover:border-neutral-300 transition-colors shadow-2xs inline-flex items-center gap-1"
+                          className="px-2.5 py-1 rounded-lg border border-[#E8E8E8] bg-white text-xs font-semibold text-black hover:bg-[#F2F4ED] hover:border-[#788A5B] transition-colors"
                         >
-                          <span>Execute</span>
-                          <ArrowRight className="w-3 h-3 text-[#788A5B]" />
+                          Resolve
                         </button>
                       </td>
                     </tr>
@@ -686,53 +473,40 @@ export default function StaffDashboard({ onNavigate }) {
             </tbody>
           </table>
         </div>
-
-        <div className="p-3.5 border-t border-[#E8E8E8] bg-white flex items-center justify-between text-xs text-neutral-500">
-          <span>
-            Showing {filteredTasks.length} tasks ({tasks.filter((t) => t.status === 'Pending').length} pending)
-          </span>
-          <span className="text-[11px] font-medium text-[#788A5B]">All operational priorities synced</span>
-        </div>
       </div>
 
       {/* =========================================================================
           D. Recent activity
           Recent Subscriptions
-          - Subscription ID
-          - Customer
-          - Plan
-          - Start Date
-          - Status
-
+          - Subscription ID, Customer, Plan, Start Date, Status
           Recent Payments
-          - Payment ID
-          - Customer
-          - Amount
-          - Payment Date
-          - Method
+          - Payment ID, Customer, Amount, Payment Date, Method
           ========================================================================= */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent Subscriptions */}
-        <div className="bg-white rounded-2xl border border-[#E8E8E8] shadow-xs overflow-hidden">
-          <div className="p-4 border-b border-[#E8E8E8] flex items-center justify-between bg-[#F2F4ED]/20">
+        <div className="bg-white rounded-2xl border border-[#E8E8E8] shadow-xs overflow-hidden flex flex-col justify-between">
+          <div className="p-5 border-b border-[#E8E8E8] flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-bold text-black">Recent Subscriptions</h3>
-              <p className="text-[11px] text-neutral-500 mt-0.5">Recently provisioned and active customer plans</p>
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="text-xs font-semibold uppercase tracking-wider text-[#788A5B]">
+                  Live Agreements
+                </span>
+                <span className="text-neutral-300">•</span>
+                <span className="text-xs font-medium text-neutral-500">PostgreSQL</span>
+              </div>
+              <h3 className="text-base font-bold text-black">Recent Subscriptions</h3>
             </div>
-            {onNavigate && (
-              <button
-                onClick={() => onNavigate('subscriptions')}
-                className="text-xs font-semibold text-[#788A5B] hover:underline flex items-center gap-1"
-              >
-                <span>View all</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            )}
+            <button
+              onClick={() => onNavigate && onNavigate('subscriptions')}
+              className="text-xs font-semibold text-black hover:text-[#788A5B] flex items-center gap-1 transition-colors"
+            >
+              View all <ChevronRight className="w-3.5 h-3.5" />
+            </button>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-[#F2F4ED]/50 text-neutral-600 font-semibold border-b border-[#E8E8E8]">
+              <thead className="bg-[#F2F4ED]/60 text-neutral-600 font-semibold border-b border-[#E8E8E8]">
                 <tr>
                   <th className="py-2.5 px-4">Subscription ID</th>
                   <th className="py-2.5 px-4">Customer</th>
@@ -742,8 +516,8 @@ export default function StaffDashboard({ onNavigate }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#E8E8E8] text-neutral-800">
-                {recentSubscriptions.map((sub, idx) => (
-                  <tr key={idx} className="hover:bg-neutral-50/70 transition-colors">
+                {recentSubscriptions.map((sub) => (
+                  <tr key={sub.id} className="hover:bg-neutral-50/70 transition-colors">
                     <td className="py-3 px-4 font-mono font-medium text-black">{sub.id}</td>
                     <td className="py-3 px-4 font-semibold text-black">{sub.customer}</td>
                     <td className="py-3 px-4 text-neutral-600">{sub.plan}</td>
@@ -753,7 +527,7 @@ export default function StaffDashboard({ onNavigate }) {
                         className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
                           sub.status === 'Active'
                             ? 'bg-[#F2F4ED] text-[#788A5B] border-[#E8E8E8]'
-                            : 'bg-blue-50 text-blue-700 border-blue-200'
+                            : 'bg-amber-50 text-amber-800 border-amber-200'
                         }`}
                       >
                         {sub.status}
@@ -767,26 +541,29 @@ export default function StaffDashboard({ onNavigate }) {
         </div>
 
         {/* Recent Payments */}
-        <div className="bg-white rounded-2xl border border-[#E8E8E8] shadow-xs overflow-hidden">
-          <div className="p-4 border-b border-[#E8E8E8] flex items-center justify-between bg-[#F2F4ED]/20">
+        <div className="bg-white rounded-2xl border border-[#E8E8E8] shadow-xs overflow-hidden flex flex-col justify-between">
+          <div className="p-5 border-b border-[#E8E8E8] flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-bold text-black">Recent Payments</h3>
-              <p className="text-[11px] text-neutral-500 mt-0.5">Cleared transactions and incoming remittances</p>
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="text-xs font-semibold uppercase tracking-wider text-[#788A5B]">
+                  Settlements
+                </span>
+                <span className="text-neutral-300">•</span>
+                <span className="text-xs font-medium text-neutral-500">PostgreSQL</span>
+              </div>
+              <h3 className="text-base font-bold text-black">Recent Payments</h3>
             </div>
-            {onNavigate && (
-              <button
-                onClick={() => onNavigate('payments')}
-                className="text-xs font-semibold text-[#788A5B] hover:underline flex items-center gap-1"
-              >
-                <span>View all</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            )}
+            <button
+              onClick={() => onNavigate && onNavigate('payments')}
+              className="text-xs font-semibold text-black hover:text-[#788A5B] flex items-center gap-1 transition-colors"
+            >
+              View all <ChevronRight className="w-3.5 h-3.5" />
+            </button>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-[#F2F4ED]/50 text-neutral-600 font-semibold border-b border-[#E8E8E8]">
+              <thead className="bg-[#F2F4ED]/60 text-neutral-600 font-semibold border-b border-[#E8E8E8]">
                 <tr>
                   <th className="py-2.5 px-4">Payment ID</th>
                   <th className="py-2.5 px-4">Customer</th>
@@ -796,13 +573,13 @@ export default function StaffDashboard({ onNavigate }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#E8E8E8] text-neutral-800">
-                {recentPayments.map((pay, idx) => (
-                  <tr key={idx} className="hover:bg-neutral-50/70 transition-colors">
+                {recentPayments.map((pay) => (
+                  <tr key={pay.id} className="hover:bg-neutral-50/70 transition-colors">
                     <td className="py-3 px-4 font-mono font-medium text-black">{pay.id}</td>
                     <td className="py-3 px-4 font-semibold text-black">{pay.customer}</td>
                     <td className="py-3 px-4 font-bold text-black">{pay.amount}</td>
                     <td className="py-3 px-4 text-neutral-500">{pay.date}</td>
-                    <td className="py-3 px-4 text-neutral-600">{pay.method}</td>
+                    <td className="py-3 px-4 text-neutral-600 text-[11px]">{pay.method}</td>
                   </tr>
                 ))}
               </tbody>
@@ -812,67 +589,60 @@ export default function StaffDashboard({ onNavigate }) {
       </div>
 
       {/* =========================================================================
-          E. Alerts section
+          E. Alerts section:
           - Upcoming renewals
           - Unpaid invoices
           - Overdue payments
           - Quotations nearing expiry
           ========================================================================= */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
+      <div className="bg-white rounded-2xl p-6 border border-[#E8E8E8] shadow-xs">
+        <div className="flex items-center justify-between pb-4 border-b border-[#E8E8E8] mb-4">
           <div>
-            <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-600">
-              Operational Priority Alerts
-            </h2>
-            <p className="text-xs text-neutral-400 mt-0.5">
-              Urgent triggers that require daily internal staff attention
+            <h3 className="text-base font-bold text-black">Operational Alerts & Critical Items</h3>
+            <p className="text-xs text-neutral-500 mt-0.5">
+              Live events generated directly from PostgreSQL database records
             </p>
           </div>
-          <span className="text-xs font-medium text-neutral-500 bg-[#F2F4ED] px-2.5 py-1 rounded-full border border-[#E8E8E8]">
-            4 Active Triggers
+          <span className="text-xs font-semibold text-[#788A5B] bg-[#F2F4ED] px-2.5 py-1 rounded-full border border-[#E8E8E8]">
+            {alerts.length} Items Monitored
           </span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {alerts.map((alert) => {
             const Icon = alert.icon;
             return (
               <div
                 key={alert.id}
-                className="bg-white rounded-2xl p-5 border border-[#E8E8E8] shadow-xs flex flex-col justify-between hover:border-neutral-300 transition-colors"
+                className="p-4 rounded-xl border border-[#E8E8E8] bg-white hover:border-[#788A5B]/40 transition-colors flex flex-col justify-between"
               >
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="w-8 h-8 rounded-xl bg-[#F2F4ED] flex items-center justify-center">
-                      <Icon className="w-4 h-4 text-[#788A5B]" />
-                    </div>
-                    <span
-                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${alert.badgeClass}`}
-                    >
-                      {alert.badgeText}
-                    </span>
+                <div className="flex items-start gap-3.5">
+                  <div className="p-2 rounded-lg bg-[#F2F4ED] text-[#788A5B] border border-[#E8E8E8] shrink-0 mt-0.5">
+                    <Icon className="w-4 h-4" />
                   </div>
-
-                  <h3 className="text-sm font-bold text-black">{alert.title}</h3>
-                  <p className="text-xs text-neutral-500 mt-1 leading-relaxed">
-                    {alert.subtitle}
-                  </p>
-                  <p className="text-[11px] font-medium text-neutral-400 mt-2">
-                    {alert.detail}
-                  </p>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <h4 className="text-xs font-bold text-black truncate">{alert.title}</h4>
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border shrink-0 ${alert.badgeClass}`}>
+                        {alert.badgeText}
+                      </span>
+                    </div>
+                    <p className="text-xs text-neutral-600 mt-1 leading-relaxed">
+                      {alert.subtitle}
+                    </p>
+                    <p className="text-[11px] font-semibold text-[#788A5B] mt-1.5">
+                      {alert.detail}
+                    </p>
+                  </div>
                 </div>
 
-                <div className="mt-4 pt-3 border-t border-[#E8E8E8]">
+                <div className="mt-3 pt-2.5 border-t border-[#E8E8E8]/70 flex items-center justify-end">
                   <button
-                    onClick={() => {
-                      if (onNavigate && alert.targetModule) {
-                        onNavigate(alert.targetModule);
-                      }
-                    }}
-                    className="w-full py-1.5 px-3 rounded-xl border border-[#E8E8E8] bg-white text-xs font-semibold text-black hover:bg-[#F2F4ED] hover:border-neutral-300 transition-colors shadow-2xs flex items-center justify-center gap-1.5"
+                    onClick={() => alert.targetModule && onNavigate(alert.targetModule)}
+                    className="text-xs font-semibold text-black hover:text-[#788A5B] flex items-center gap-1 transition-colors"
                   >
                     <span>{alert.actionLabel}</span>
-                    <ArrowRight className="w-3 h-3 text-[#788A5B]" />
+                    <ArrowRight className="w-3 h-3" />
                   </button>
                 </div>
               </div>
@@ -883,4 +653,3 @@ export default function StaffDashboard({ onNavigate }) {
     </div>
   );
 }
-

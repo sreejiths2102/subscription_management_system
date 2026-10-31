@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Package,
   Plus,
@@ -12,7 +12,7 @@ import {
   Lock,
   DollarSign
 } from 'lucide-react';
-import { authService } from '../../api';
+import { authService, productService } from '../../api';
 
 export default function ProductManagementPanel({ userRole: propRole }) {
   const currentUser = authService.getUser() || { role: 'admin' };
@@ -26,61 +26,9 @@ export default function ProductManagementPanel({ userRole: propRole }) {
   const [editOpen, setEditOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [variantsOpen, setVariantsOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const [products, setProducts] = useState([
-    {
-      id: 'PRD-001',
-      name: 'Brightloop Core Platform',
-      type: 'Software Suite',
-      salesPrice: '$149.00',
-      costPrice: '$28.00',
-      variantsCount: 3,
-      description: 'Central cloud management dashboard and client subscription runtime engine.',
-      variants: [
-        { code: 'VAR-01', name: 'Standard Single Seat', multiplier: '1.0x', active: true },
-        { code: 'VAR-02', name: 'Multi-Seat Team (5 Seats)', multiplier: '3.5x', active: true },
-        { code: 'VAR-03', name: 'Unlimited Enterprise Org', multiplier: '8.0x', active: true }
-      ]
-    },
-    {
-      id: 'PRD-002',
-      name: 'Analytics Intelligence Engine',
-      type: 'Add-on Module',
-      salesPrice: '$49.00',
-      costPrice: '$12.00',
-      variantsCount: 2,
-      description: 'Real-time cohort retention curves, churn predictors, and visual data models.',
-      variants: [
-        { code: 'VAR-04', name: 'Standard Reporting Pack', multiplier: '1.0x', active: true },
-        { code: 'VAR-05', name: 'Advanced Machine Learning Forecasts', multiplier: '2.5x', active: true }
-      ]
-    },
-    {
-      id: 'PRD-003',
-      name: 'Enterprise Dedicated Server Instance',
-      type: 'Infrastructure',
-      salesPrice: '$499.00',
-      costPrice: '$180.00',
-      variantsCount: 2,
-      description: 'Isolated high-throughput PostgreSQL + worker instance with guaranteed SLA.',
-      variants: [
-        { code: 'VAR-06', name: 'Standard Virtual Machine (4 vCPU)', multiplier: '1.0x', active: true },
-        { code: 'VAR-07', name: 'High Memory Virtual Machine (16 vCPU)', multiplier: '2.0x', active: true }
-      ]
-    },
-    {
-      id: 'PRD-004',
-      name: 'White-Label Branding Suite',
-      type: 'Customization',
-      salesPrice: '$99.00',
-      costPrice: '$5.00',
-      variantsCount: 1,
-      description: 'Custom domain mapping, branded emails, logos, and custom colorways.',
-      variants: [
-        { code: 'VAR-08', name: 'Full Custom CSS & Domain Mapping', multiplier: '1.0x', active: true }
-      ]
-    }
-  ]);
+  const [products, setProducts] = useState([]);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -90,37 +38,78 @@ export default function ProductManagementPanel({ userRole: propRole }) {
     description: ''
   });
 
-  const filteredProducts = products.filter((p) => {
-    const matchesSearch =
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.id.toLowerCase().includes(search.toLowerCase());
-    const matchesType = typeFilter === 'All' || p.type.toLowerCase() === typeFilter.toLowerCase();
-    return matchesSearch && matchesType;
-  });
-
-  const handleDelete = (id) => {
-    if (!isAdmin) return;
-    if (window.confirm('Are you sure you want to delete this product?')) {
-      setProducts(products.filter((p) => p.id !== id));
+  const fetchProducts = async () => {
+    try {
+      setLoading(true);
+      const data = await productService.getAll({
+        search,
+        product_type: typeFilter !== 'All' ? typeFilter : undefined
+      });
+      const mapped = (data || []).map((p) => ({
+        id: p.code || `PRD-${p.id}`,
+        db_id: p.id,
+        name: p.name,
+        type: p.product_type || 'Software Suite',
+        salesPrice: `$${parseFloat(p.sales_price || 0).toFixed(2)}`,
+        costPrice: `$${parseFloat(p.cost_price || 0).toFixed(2)}`,
+        rawSales: parseFloat(p.sales_price || 0),
+        rawCost: parseFloat(p.cost_price || 0),
+        variantsCount: (p.variants || []).length,
+        description: p.description || 'Software product offering.',
+        variants: (p.variants || []).map((v) => ({
+          code: v.sku || `VAR-${v.id}`,
+          name: v.name,
+          multiplier: `+$${parseFloat(v.additional_price || 0).toFixed(2)}`,
+          active: v.is_active
+        }))
+      }));
+      setProducts(mapped);
+    } catch (err) {
+      console.error('Failed to load products from DB:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleCreate = (e) => {
+  useEffect(() => {
+    fetchProducts();
+  }, [search, typeFilter]);
+
+  const handleDelete = async (id) => {
+    if (!isAdmin) return;
+    if (window.confirm('Are you sure you want to delete/deactivate this product?')) {
+      try {
+        const p = products.find((item) => item.id === id);
+        if (p?.db_id) {
+          await productService.delete(p.db_id);
+          await fetchProducts();
+        }
+      } catch (err) {
+        alert('Failed to delete product: ' + (err.response?.data?.detail || err.message));
+      }
+    }
+  };
+
+  const handleCreate = async (e) => {
     e.preventDefault();
     if (!isAdmin) return;
-    const newProd = {
-      id: `PRD-00${products.length + 1}`,
-      name: formData.name,
-      type: formData.type,
-      salesPrice: formData.salesPrice.startsWith('$') ? formData.salesPrice : `$${formData.salesPrice}`,
-      costPrice: formData.costPrice.startsWith('$') ? formData.costPrice : `$${formData.costPrice}`,
-      variantsCount: 1,
-      description: formData.description,
-      variants: [{ code: `VAR-0${products.length + 5}`, name: 'Default Variant', multiplier: '1.0x', active: true }]
-    };
-    setProducts([...products, newProd]);
-    setFormData({ name: '', type: 'Software Suite', salesPrice: '', costPrice: '', description: '' });
-    setCreateOpen(false);
+    try {
+      await productService.create({
+        name: formData.name,
+        product_type: formData.type,
+        sales_price: parseFloat(formData.salesPrice.replace(/[^0-9.]/g, '') || 0),
+        cost_price: parseFloat(formData.costPrice.replace(/[^0-9.]/g, '') || 0),
+        description: formData.description,
+        variants: [
+          { name: 'Standard Single Seat', sku: `SKU-${Date.now().toString().slice(-4)}`, additional_price: 0.0 }
+        ]
+      });
+      setFormData({ name: '', type: 'Software Suite', salesPrice: '', costPrice: '', description: '' });
+      setCreateOpen(false);
+      await fetchProducts();
+    } catch (err) {
+      alert('Failed to create product: ' + (err.response?.data?.detail || err.message));
+    }
   };
 
   return (
@@ -132,7 +121,7 @@ export default function ProductManagementPanel({ userRole: propRole }) {
             <span className="text-xs font-semibold uppercase tracking-wider text-[#788A5B]">Catalog Management</span>
             <span className="text-neutral-300">•</span>
             {isAdmin ? (
-              <span className="text-xs font-medium text-neutral-500">Full CRUD Control</span>
+              <span className="text-xs font-medium text-neutral-500">PostgreSQL Full CRUD Control</span>
             ) : (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#F2F4ED] text-[#788A5B]">
                 <Lock className="w-3 h-3" /> Staff View Only
@@ -142,12 +131,12 @@ export default function ProductManagementPanel({ userRole: propRole }) {
           <h1 className="text-2xl font-bold tracking-tight text-black">Product Management</h1>
           <p className="text-xs text-neutral-500 mt-1 max-w-2xl">
             {isAdmin
-              ? 'Create, edit, and configure software products, tier variants, cost margins, and pricing suites.'
+              ? 'Create, edit, and configure software products, tier variants, cost margins, and pricing suites in PostgreSQL.'
               : 'View authorized software products and available variants.'}
           </p>
         </div>
 
-        {/* 6. Create Product Button (Admin only) */}
+        {/* Create Product Button (Admin only) */}
         {isAdmin && (
           <button
             onClick={() => setCreateOpen(true)}
@@ -161,7 +150,7 @@ export default function ProductManagementPanel({ userRole: propRole }) {
 
       {/* Main Table Container */}
       <div className="bg-white rounded-2xl border border-[#E8E8E8] shadow-xs overflow-hidden">
-        {/* 2 & 3. Search and Type Filter */}
+        {/* Search and Type Filter */}
         <div className="p-4 border-b border-[#E8E8E8] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-[#F2F4ED]/30">
           <div className="relative flex-1 max-w-md">
             <Search className="w-4 h-4 absolute left-3 top-2.5 text-neutral-400" />
@@ -190,7 +179,7 @@ export default function ProductManagementPanel({ userRole: propRole }) {
           </div>
         </div>
 
-        {/* 4. Product Table */}
+        {/* Product Table */}
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-[#F2F4ED]/60 text-neutral-600 font-semibold border-b border-[#E8E8E8]">
@@ -205,71 +194,79 @@ export default function ProductManagementPanel({ userRole: propRole }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#E8E8E8] text-neutral-800">
-              {filteredProducts.map((p) => (
-                <tr key={p.id} className="hover:bg-neutral-50/70 transition-colors">
-                  <td className="py-3.5 px-4 font-mono font-medium text-black">{p.id}</td>
-                  <td className="py-3.5 px-4 font-medium text-black">{p.name}</td>
-                  <td className="py-3.5 px-4">
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-[#F2F4ED] text-[#788A5B] border border-[#E8E8E8]">
-                      {p.type}
-                    </span>
-                  </td>
-                  <td className="py-3.5 px-4 font-semibold text-black">{p.salesPrice}</td>
-                  <td className="py-3.5 px-4 text-neutral-500">{p.costPrice}</td>
-                  <td className="py-3.5 px-4 text-center">
-                    <button
-                      onClick={() => {
-                        setSelectedProduct(p);
-                        setVariantsOpen(true);
-                      }}
-                      className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg border border-[#E8E8E8] bg-white hover:border-black text-[11px] font-medium transition-colors"
-                    >
-                      <Layers className="w-3 h-3 text-[#788A5B]" />
-                      <span>{p.variantsCount} variants</span>
-                    </button>
-                  </td>
-                  <td className="py-3.5 px-4 text-right space-x-1">
-                    <button
-                      onClick={() => {
-                        setSelectedProduct(p);
-                        setDetailsOpen(true);
-                      }}
-                      className="p-1 rounded-lg text-neutral-500 hover:text-black hover:bg-neutral-100 transition-colors"
-                      title="View Details"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                    </button>
-
-                    {isAdmin && (
-                      <>
-                        <button
-                          onClick={() => {
-                            setSelectedProduct(p);
-                            setEditOpen(true);
-                          }}
-                          className="p-1 rounded-lg text-neutral-500 hover:text-black hover:bg-neutral-100 transition-colors"
-                          title="Edit Product"
-                        >
-                          <Edit className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(p.id)}
-                          className="p-1 rounded-lg text-neutral-500 hover:text-red-600 hover:bg-red-50 transition-colors"
-                          title="Delete Product"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </>
-                    )}
+              {products.length === 0 ? (
+                <tr>
+                  <td colSpan="7" className="py-6 text-center text-neutral-400">
+                    No products found in database.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                products.map((p) => (
+                  <tr key={p.id} className="hover:bg-neutral-50/70 transition-colors">
+                    <td className="py-3.5 px-4 font-mono font-medium text-black">{p.id}</td>
+                    <td className="py-3.5 px-4 font-medium text-black">{p.name}</td>
+                    <td className="py-3.5 px-4">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-[#F2F4ED] text-[#788A5B] border border-[#E8E8E8]">
+                        {p.type}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-4 font-semibold text-black">{p.salesPrice}</td>
+                    <td className="py-3.5 px-4 text-neutral-500">{p.costPrice}</td>
+                    <td className="py-3.5 px-4 text-center">
+                      <button
+                        onClick={() => {
+                          setSelectedProduct(p);
+                          setVariantsOpen(true);
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg border border-[#E8E8E8] bg-white hover:border-black text-[11px] font-medium transition-colors"
+                      >
+                        <Layers className="w-3 h-3 text-[#788A5B]" />
+                        <span>{p.variantsCount} variants</span>
+                      </button>
+                    </td>
+                    <td className="py-3.5 px-4 text-right space-x-1">
+                      <button
+                        onClick={() => {
+                          setSelectedProduct(p);
+                          setDetailsOpen(true);
+                        }}
+                        className="p-1 rounded-lg text-neutral-500 hover:text-black hover:bg-neutral-100 transition-colors"
+                        title="View Details"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                      </button>
+
+                      {isAdmin && (
+                        <>
+                          <button
+                            onClick={() => {
+                              setSelectedProduct(p);
+                              setEditOpen(true);
+                            }}
+                            className="p-1 rounded-lg text-neutral-500 hover:text-black hover:bg-neutral-100 transition-colors"
+                            title="Edit Product"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(p.id)}
+                            className="p-1 rounded-lg text-neutral-500 hover:text-red-600 hover:bg-red-50 transition-colors"
+                            title="Delete Product"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* 5. Product Details Dialog */}
+      {/* Details Dialog */}
       {detailsOpen && selectedProduct && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 border border-[#E8E8E8] shadow-xl">
@@ -321,7 +318,7 @@ export default function ProductManagementPanel({ userRole: propRole }) {
         </div>
       )}
 
-      {/* 9. Product Variants Dialog */}
+      {/* Product Variants Dialog */}
       {variantsOpen && selectedProduct && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 border border-[#E8E8E8] shadow-xl">
@@ -338,33 +335,30 @@ export default function ProductManagementPanel({ userRole: propRole }) {
             </div>
 
             <div className="mt-4 space-y-2">
-              {selectedProduct.variants.map((v, idx) => (
-                <div
-                  key={idx}
-                  className="p-3 rounded-xl border border-[#E8E8E8] bg-white flex items-center justify-between text-xs"
-                >
-                  <div>
-                    <span className="font-mono text-neutral-400 mr-2">{v.code}</span>
-                    <span className="font-medium text-black">{v.name}</span>
+              {selectedProduct.variants?.length === 0 ? (
+                <p className="text-xs text-neutral-400 py-3 text-center">No variants attached to this product.</p>
+              ) : (
+                selectedProduct.variants?.map((v, idx) => (
+                  <div
+                    key={idx}
+                    className="p-3 rounded-xl border border-[#E8E8E8] bg-white flex items-center justify-between text-xs"
+                  >
+                    <div>
+                      <span className="font-mono text-neutral-400 mr-2">{v.code}</span>
+                      <span className="font-medium text-black">{v.name}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-neutral-500">Price Adjust: {v.multiplier}</span>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#F2F4ED] text-[#788A5B] border border-[#E8E8E8]">
+                        Active
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-neutral-500">Rate: {v.multiplier}</span>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#F2F4ED] text-[#788A5B] border border-[#E8E8E8]">
-                      Active
-                    </span>
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
 
-            <div className="mt-6 pt-3 border-t border-[#E8E8E8] flex justify-between items-center">
-              {isAdmin ? (
-                <button className="text-xs font-semibold text-black hover:text-[#788A5B] transition-colors">
-                  + Add Variant Option
-                </button>
-              ) : (
-                <span className="text-[11px] text-neutral-400">Variant edits restricted to Admin</span>
-              )}
+            <div className="mt-6 pt-3 border-t border-[#E8E8E8] flex justify-end">
               <button
                 onClick={() => setVariantsOpen(false)}
                 className="px-4 py-2 rounded-xl bg-black text-white text-xs font-semibold hover:bg-neutral-800"
@@ -403,7 +397,7 @@ export default function ProductManagementPanel({ userRole: propRole }) {
                 <select
                   value={formData.type}
                   onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl border border-[#E8E8E8] focus:outline-none focus:ring-1 focus:ring-[#788A5B]"
+                  className="w-full px-3 py-2 rounded-xl border border-[#E8E8E8] focus:outline-none focus:ring-1 focus:ring-[#788A5B] bg-white"
                 >
                   <option value="Software Suite">Software Suite</option>
                   <option value="Add-on Module">Add-on Module</option>
@@ -454,7 +448,7 @@ export default function ProductManagementPanel({ userRole: propRole }) {
                   Cancel
                 </button>
                 <button type="submit" className="px-4 py-2 rounded-xl bg-black text-white font-semibold hover:bg-neutral-800">
-                  Save Product
+                  Save Product in DB
                 </button>
               </div>
             </form>
