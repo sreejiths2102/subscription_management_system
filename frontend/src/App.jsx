@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Blank from './pages/Blank';
+import AdminPanel from './components/admin/AdminPanel';
 import ProtectedRoute from './components/ProtectedRoute';
 
 export default function App() {
@@ -11,6 +12,18 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute>
+              <AdminPanel />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin-dashboard"
+          element={<Navigate to="/admin" replace />}
+        />
         <Route
           path="/blank"
           element={

@@ -60,8 +60,12 @@ export default function Login() {
       localStorage.setItem('access_token', data.access_token);
       localStorage.setItem('user', JSON.stringify(data.user));
 
-      // Redirect to /blank as required
-      navigate('/blank', { replace: true });
+      // Redirect admin to admin panel, otherwise redirect to /blank
+      if (data.user?.role === 'admin') {
+        navigate('/admin', { replace: true });
+      } else {
+        navigate('/blank', { replace: true });
+      }
     } catch (err) {
       const detail = err.response?.data?.detail;
       if (typeof detail === 'string') {
