@@ -145,11 +145,10 @@ export default function Login() {
                   autoComplete="email"
                   value={formData.email}
                   onChange={handleChange}
-                  className={`block w-full appearance-none rounded-xl border px-3.5 py-2.5 text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-1 sm:text-sm transition-colors ${
-                    errors.email
+                  className={`block w-full appearance-none rounded-xl border px-3.5 py-2.5 text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-1 sm:text-sm transition-colors ${errors.email
                       ? 'border-red-300 focus:border-red-500 focus:ring-red-500'
                       : 'border-neutral-200 focus:border-olive-600 focus:ring-olive-600'
-                  }`}
+                    }`}
                   placeholder="name@company.com"
                 />
                 {errors.email && <p className="mt-1 text-xs text-red-600">{errors.email}</p>}
@@ -176,11 +175,10 @@ export default function Login() {
                   autoComplete="current-password"
                   value={formData.password}
                   onChange={handleChange}
-                  className={`block w-full appearance-none rounded-xl border px-3.5 py-2.5 pr-10 text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-1 sm:text-sm transition-colors ${
-                    errors.password
+                  className={`block w-full appearance-none rounded-xl border px-3.5 py-2.5 pr-10 text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-1 sm:text-sm transition-colors ${errors.password
                       ? 'border-red-300 focus:border-red-500 focus:ring-red-500'
                       : 'border-neutral-200 focus:border-olive-600 focus:ring-olive-600'
-                  }`}
+                    }`}
                   placeholder="••••••••••••"
                 />
                 <button
@@ -213,30 +211,7 @@ export default function Login() {
             </div>
           </form>
 
-          {/* Quick Demo Autofill Helper */}
-          <div className="mt-6 pt-5 border-t border-neutral-100 flex flex-col gap-2">
-            <span className="text-[11px] font-medium text-neutral-400 text-center uppercase tracking-wider">
-              Quick Role Sign-In
-            </span>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={fillAdminCredentials}
-                className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-neutral-200 text-xs font-medium text-neutral-700 hover:bg-neutral-50 transition-colors"
-              >
-                <ShieldCheck className="w-3.5 h-3.5 text-olive-600" />
-                <span>Admin Demo</span>
-              </button>
-              <button
-                type="button"
-                onClick={fillStaffCredentials}
-                className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-neutral-200 text-xs font-medium text-neutral-700 hover:bg-neutral-50 transition-colors"
-              >
-                <UserCheck className="w-3.5 h-3.5 text-olive-600" />
-                <span>Staff Demo</span>
-              </button>
-            </div>
-          </div>
+
         </div>
       </div>
     </div>
